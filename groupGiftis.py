@@ -18,6 +18,7 @@ def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
                 groupsummary=[],groupstats=True):
     
     replaceNans = 0
+    M = list()
     
     [a,b,ext] = os.path.split(P[1,:])
     
@@ -32,7 +33,8 @@ def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
             numCols[i]=np.nan
             numRows[i]=np.nan
         else:
-            M[i]=nb.load(filename)
+            A=nb.load(filename)
+            M.append(A)
             da = M[i].darrays
             [numRows[i],numCols[i]]=[int(M[i].darrays[0].data.shape[0]),\
                                      len(M[i].darrays)]
@@ -58,15 +60,15 @@ def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
     #Determine output column names
     if outcolnames.size == 0:
         for i in range(inputcol):
-            [a,b,c] = os.path.split(P[col,:])
+            [a,b,c] = os.path.split(P[i,:])
             outcolnames[i] = b
             
     #Reorder into new metric files
     for file in range(inputcol):
-        OutData = np.empty((numrows,len(M))*np.nan
+        OutData = np.multiply(np.empty((numrows,len(M)),np.nan))
         for col in range(len(M)):
-            if len(M[col]) ~= 0:
-                Outdata[:,col] = M[col].darrays(:,inputcol[file])
+            if len(M[col]) != 0:
+                Outdata[:,col] = M[col].darrays[:,inputcol[file]]
         if (len(outfilenames) == 0 or len(outfilenames)<file):
             outfilenames[file] = print("{}.func.gii".\
                         format(inputColumnNames[inputcol[file]]))
@@ -77,7 +79,7 @@ def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
         SumData[:,file] = groupstats(OutData)
         
     #If Summary file name is given
-    if len(groupsummary) ~= 0:
+    if len(groupsummary) != 0:
         O = surfAnalysisPy.makeFuncGifti(SumData,columNames=outcolnames,\
                                anatomicalStruct=anatStruct)
         nb.save(O,groupsummary)

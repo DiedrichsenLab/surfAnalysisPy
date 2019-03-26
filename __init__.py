@@ -1,4 +1,11 @@
-# surfAnalysis package to run surface pipeline 
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# surfAnalysisPy package to run surface pipeline 
 # from <module name> import <function name>  
-from affineTransform import affineTransform
-from getGiftiAnatomicalStruct import getGiftiAnatomicalStruct
+from surfAnalysisPy import affineTransform
+from surfAnalysisPy import getGiftiAnatomicalStruct
+from surfAnalysisPy import getGiftiColumnNames
+from surfAnalysisPy import makeFuncGifti
+from surfAnalysisPy import resliceFS2WB
+from surfAnalysisPy import groupGiftis

@@ -6,7 +6,7 @@ Created on Mon Mar 25 21:11:31 2019
 @author: switt
 """
 
-def getColumnNames(G):
+def getGiftiColumnNames(G):
     N = len(G.darrays)
     for n in range(N):
         for i in range(len(G.darrays[n].meta.data)):

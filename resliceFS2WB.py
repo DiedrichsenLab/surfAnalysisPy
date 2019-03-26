@@ -59,22 +59,21 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
     # So to find a transform of the
     # Mvox2surf: Transform of voxels in 256x256 image to surface vertices
     # Mvox2space: Transform of voxel to subject space
-    anaFile = os.path.join(subjDir,subjName,"mri","brain.mgz")
+    anaFile = os.path.join(subjDir,subjName,"fsaverage","mri","brain.mgz")
     p = subprocess.Popen(["mri_info", anaFile, "--vox2ras-tkr"],\
-                         stdout=subprocess.PIPE,stderr=subprocess.PIPE,\
-                         shell=True)
-    (out,status) = p.communicate()
-  
-    A = np.array(out)
-    Mvox2surf = np.reshape(A,4,4).T
+                         stdout=subprocess.PIPE,stderr=subprocess.PIPE).\
+                         stdout.decode('utf-8').split()
+    out = np.array(list(map(float,p)))
+#    out = out.reshape(-1,4).T
+    Mvox2surf = out.reshape(-1,4)
 
 
-    p = subprocess.Popen(["mri_info", anaFile, "--vox2ras"],\
-                         stdout=subprocess.PIPE,stderr=subprocess.PIPE,\
-                         shell=True)
-    (out,status) = p.communicate()
-    A = np.array(out)
-    Mvox2space = np.reshape(A,4,4).T
+    p = subprocess.run(["mri_info", anaFile, "--vox2ras"],\
+                         stdout=subprocess.PIPE,stderr=subprocess.PIPE).\
+                       stdout.decode('utf-8').split()
+    out = np.array(list(map(float,p)))
+#    out = out.reshape(-1,4).T
+    Mvox2space = out.reshape(-1,4)
     Msurf2space = np.matmul(Mvox2space,np.linalg.inv(Mvox2surf))
     
     #---------------------

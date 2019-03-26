@@ -8,9 +8,9 @@ Created on Mon Mar 25 21:03:53 2019
 
 def getGiftiAnatomicalStruct(G):
     N = len(G._meta.data)
-    anatomicalStruct = []
+    anatStruct = []
     for i in range(N):
         if 'AnatomicalStructurePrimary' in G._meta.data[i].name:
-            anatomicalStruct = G._meta_data[i].value
+            anatStruct = G._meta_data[i].value
             return
             

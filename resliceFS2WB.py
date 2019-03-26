@@ -10,7 +10,7 @@ import re
 import numpy as np
 import subprocess
 import nibabel as nb
-import surf_affine_transform
+from surfAnalysisPy import affineTransform
 
 
 def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
@@ -109,7 +109,7 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
             A = nb.load(outName)
             if (alignSurf[i]):
                 [A.darrays[0].coordsys.xform[:,0],A.darrays[0].coordsys.xform[:,1],\
-                 A.darrays[0].coordsys.xform[:,2]]=surf_affine_transform.transform(\
+                 A.darrays[0].coordsys.xform[:,2]]=surfAnalysisPy.affineTransform(\
                  A.darrays[0].coordsys.xform[:,0],A.darrays[0].coordsys.xform[:,1],\
                  A.darrays[0].coordsys.xform[:,2],Msurf2space)
                 

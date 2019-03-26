@@ -8,9 +8,9 @@ Created on Mon Mar 25 08:36:34 2019
 import os
 import numpy as np
 import nibabel as nb
-import makeFuncGifti
-import getGiftiColumnNames
-import getGiftiAnatomicalStruct
+from surfAnalysisPy import makeFuncGifti
+from surfAnalysisPy import getGiftiColumnNames
+from surfAnalysisPy import getGiftiAnatomicalStruct
 
 
 def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
@@ -50,10 +50,10 @@ def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
     numrows = np.nanmean(numRows)
     
     #Get the input column names
-    inputColumnNames = getGiftiColumnNames.getColumnNames(M[0])
+    inputColumnNames = surfAnalysisPy.getGiftiColumnNames(M[0])
     
     #Get main anatomical structure
-    anatStruct = getGiftiAnatomicalStruct.getStruct(M[0])
+    anatStruct = surfAnalysisPy.getGiftiAnatomicalStruct(M[0])
     
     #Determine output column names
     if outcolnames.size == 0:
@@ -70,7 +70,7 @@ def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
         if (len(outfilenames) == 0 or len(outfilenames)<file):
             outfilenames[file] = print("{}.func.gii".\
                         format(inputColumnNames[inputcol[file]]))
-        O = makeFuncGifti.makeFuncGifti(OutData,\
+        O = surfAnalysisPy.makeFuncGifti(OutData,\
                                              columnNames=outcolnames,\
                                              anatomicalStruct=anatStruct)
         nb.save(O,outfilenames[file])
@@ -78,7 +78,7 @@ def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
         
     #If Summary file name is given
     if len(groupsummary) ~= 0:
-        O = makeFuncGifti.makeFuncGifti(SumData,columNames=outcolnames,\
+        O = surfAnalysisPy.makeFuncGifti(SumData,columNames=outcolnames,\
                                anatomicalStruct=anatStruct)
         nb.save(O,groupsummary)
         

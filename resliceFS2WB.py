@@ -10,12 +10,12 @@ import re
 import numpy as np
 import subprocess
 import nibabel as nb
-from surfAnalysisPy import affineTransform
+from . import affineTransform
 
 
 def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
-                 smoothing=1,surfFiles=["white","pial","inflated"],
-                 curvFiles=["curv","sulc","area"],hemisphere=[0,1],
+                 smoothing=1,surfFiles=["white","pial","inflated"],\
+                 curvFiles=["curv","sulc","area"],hemisphere=[0,1],\
                  alignSurf=[1,1,1]):
     
     hemisphere = np.array(hemisphere)
@@ -59,21 +59,19 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
     # So to find a transform of the
     # Mvox2surf: Transform of voxels in 256x256 image to surface vertices
     # Mvox2space: Transform of voxel to subject space
-    anaFile = os.path.join(subjDir,subjName,"fsaverage","mri","brain.mgz")
-    p = subprocess.Popen(["mri_info", anaFile, "--vox2ras-tkr"],\
+    anaFile = os.path.join(subjDir,subjName,"mri","brain.mgz")
+    p = subprocess.run(["mri_info", anaFile, "--vox2ras-tkr"],\
                          stdout=subprocess.PIPE,stderr=subprocess.PIPE).\
                          stdout.decode('utf-8').split()
-    out = np.array(list(map(float,p)))
-#    out = out.reshape(-1,4).T
-    Mvox2surf = out.reshape(-1,4)
+    outp = np.array(list(map(float,p)))
+    Mvox2surf = outp.reshape(-1,4)
 
 
-    p = subprocess.run(["mri_info", anaFile, "--vox2ras"],\
-                         stdout=subprocess.PIPE,stderr=subprocess.PIPE).\
+    q = subprocess.run(["mri_info", anaFile, "--vox2ras"],\
+                       stdout=subprocess.PIPE,stderr=subprocess.PIPE).\
                        stdout.decode('utf-8').split()
-    out = np.array(list(map(float,p)))
-#    out = out.reshape(-1,4).T
-    Mvox2space = out.reshape(-1,4)
+    outq = np.array(list(map(float,q)))
+    Mvox2space = outq.reshape(-1,4)
     Msurf2space = np.matmul(Mvox2space,np.linalg.inv(Mvox2surf))
     
     #---------------------
@@ -82,24 +80,30 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
         #Convert regSphere
         regSphere = '.'.join((hem[h],"sphere.reg.surf.gii"))
 
-        subprocess.call(["mris_convert", ('.'.join(hem[h], "sphere.reg")),\
-                         regSphere])
+        subprocess.call(["mris_convert", ('.'.join((hem[h],"sphere.reg"))),regSphere])
+        
     #-----------------------
     #do all the surface files
         for i in range(numSurf):
             #Set up file names
-            fileName = '.'.join(hem[h],surfFiles[i],"surf.gii")
-            outName = os.path.join(newDir,('.'.join(subjName,Hem[h],\
-                                                      surfFiles[i],'164k.surf.gii')))
+            fileName = '.'.join((hem[h],surfFiles[i],"surf.gii"))
+            
+            if len(subjName) == 0:
+                outName = os.path.join(newDir,('.'.join((Hem[h],surfFiles[i],\
+                                                         '164k.surf.gii'))))
+            else:
+                outName = os.path.join(newDir,('.'.join((subjName,Hem[h],\
+                                                         surfFiles[i],'164k.surf.gii'))))
+                
             atlasName = os.path.join(atlasDir,"resample_fsaverage",\
-                                      ('.'.join("fs_LR-deformed_to_fsaverage",\
-                                                Hem[h],"sphere.164k_fs_LR.surf.gii")))
+                                      ('.'.join(("fs_LR-deformed_to-fsaverage",\
+                                                Hem[h],"sphere.164k_fs_LR.surf.gii"))))
             
 
-            subprocess.call(["mris_convert", ('.'.join(hem[h],surfFiles[i])),fileName])
+            subprocess.run(["mris_convert", ('.'.join((hem[h],surfFiles[i]))),fileName])
             
 
-            subprocess.call(["wb_command", "-surface-resample",\
+            subprocess.run(["wb_command", "-surface-resample",\
                              fileName,regSphere,atlasName,\
                              "BARYCENTRIC",outName])
             
@@ -108,8 +112,9 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
             A = nb.load(outName)
             if (alignSurf[i]):
                 [A.darrays[0].coordsys.xform[:,0],A.darrays[0].coordsys.xform[:,1],\
-                 A.darrays[0].coordsys.xform[:,2]]=surfAnalysisPy.affineTransform(\
-                 A.darrays[0].coordsys.xform[:,0],A.darrays[0].coordsys.xform[:,1],\
+                 A.darrays[0].coordsys.xform[:,2]]=\
+                 affineTransform.affineTransform(A.darrays[0].\
+                 coordsys.xform[:,0],A.darrays[0].coordsys.xform[:,1],\
                  A.darrays[0].coordsys.xform[:,2],Msurf2space)
                 
             nb.save(A,outName)
@@ -119,17 +124,23 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
         for i in range(numCurv):
             #Set up file names
             fileName = '.'.join((hem[h],curvFiles[i],"shape.gii"))
-            outName = os.path.join(newDir,('.'.join((subjName,Hem[h],\
-                                                      curvFiles[i],"164k.shape.gii"))))
+            
+            if len(subjName) == 0:
+                outName = os.path.join(newDir,('.'.join((Hem[h],curvFiles[i],\
+                                                         "164k.shape.gii"))))
+            else:
+                outName = os.path.join(newDir,('.'.join((subjName,Hem[h],\
+                                                         curvFiles[i],"164k.shape.gii"))))
+                
             atlasName = os.path.join(atlasDir,"resample_fsaverage",\
-                                     ('.'.join("fs_LR-deformed_to_fsaverage",\
-                                               Hem[h],"sphere.164k_fs_LR.surf.gii")))
+                                     ('.'.join(("fs_LR-deformed_to-fsaverage",\
+                                               Hem[h],"sphere.164k_fs_LR.surf.gii"))))
             
             #Convert surface to Gifti
-            subprocess.call(["mris_convert", "-c", ('.'.join(hem[h],curvFiles[i])),\
-                             ('.'.join(hem[h],surfFiles[0])), fileName])
+            subprocess.run(["mris_convert", "-c", ('.'.join((hem[h],curvFiles[i]))),\
+                            ('.'.join((hem[h],surfFiles[0]))), fileName])
            
-            subprocess.call(["wb_command", "-metric-resample",\
+            subprocess.run(["wb_command", "-metric-resample",\
                              fileName, regSphere, atlasName, "BARYCENTRIC", outName])           
             
             

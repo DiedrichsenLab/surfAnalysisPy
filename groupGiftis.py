@@ -13,12 +13,13 @@ from surfAnalysisPy import getGiftiColumnNames
 from surfAnalysisPy import getGiftiAnatomicalStruct
 
 
-def groupGiftis(filelist,inputcol=np.array(),outcolnames=[],\
+def groupGiftis(filelist,inputcol=[],outcolnames=[],\
                 outfilenames=[],outfilenamePattern='{}.func.gii',\
                 groupsummary=[],groupstats=True):
     
     replaceNans = 0
     M = list()
+    inputcol = np.array(inputcol)
     
     [a,b,ext] = os.path.split(P[1,:])
     

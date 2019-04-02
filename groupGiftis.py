@@ -75,6 +75,7 @@ def groupGiftis(filelist,inputcol=[],outcolnames=[],\
     #Reorder into new metric files
     for file in range(len(inputcol)):
         OutData = np.empty([int(numrows),int(len(M))])*np.nan
+        SumData = np.empty([int(numrows),int(len(inputcol))])*np.nan
         for col in range(len(M)):
             if len(M[col].darrays[file].data) != 0:
                 OutData[:,col] = M[col].darrays[inputcol[file]].data

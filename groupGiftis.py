@@ -9,7 +9,7 @@ import os
 import sys
 import numpy as np
 import nibabel as nb
-from . import makeFuncGifti2
+from . import makeFuncGifti
 from . import getGiftiColumnNames
 from . import getGiftiAnatomicalStruct
 
@@ -81,7 +81,7 @@ def groupGiftis(filelist,inputcol=[],outcolnames=[],\
         if (len(outfilenames) == 0 or len(outfilenames)<file):
             outfilenames.append(str.format("{}.func.gii".\
                         format(inputColumnNames[inputcol[file]])))
-        O = makeFuncGifti2.makeFuncGifti(OutData,\
+        O = makeFuncGifti.makeFuncGifti(OutData,\
                                              columnNames=outcolnames,\
                                              anatomicalStruct=anatStruct)
         nb.save(O,outfilenames[file])
@@ -90,7 +90,7 @@ def groupGiftis(filelist,inputcol=[],outcolnames=[],\
         
     #If Summary file name is given
     if len(groupsummary) != 0:
-        O = makeFuncGifti2.makeFuncGifti(SumData,columNames=outcolnames,\
+        O = makeFuncGifti.makeFuncGifti(SumData,columNames=outcolnames,\
                                anatomicalStruct=anatStruct)
         nb.save(O,groupsummary)
         

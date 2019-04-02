@@ -12,5 +12,5 @@ def getGiftiAnatomicalStruct(G):
     for i in range(N):
         if 'AnatomicalStructurePrimary' in G._meta.data[i].name:
             anatStruct.append(G._meta.data[i].value)
-            return
+    return anatStruct
             

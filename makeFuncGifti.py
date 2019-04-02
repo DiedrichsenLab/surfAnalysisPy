@@ -9,35 +9,42 @@ import os
 import numpy as np
 import nibabel as nb
 
-
 def makeFuncGifti(data,anatomicalStruct='CortexLeft',columnNames=[]):
     
-    [N,Q] = data.shape()
+    [N,Q] = [data.shape[0], data.shape[1]]
     #Make columnNames if empty
-    if data.size() == 0:
+    if data.shape[0] == 0:
         for i in range(Q):
-            columnNames[i] = print("col_{}".format(i))
+            columnNames.append("col_{:02d}".format(i+1))
     
-    M = nb.gifti.gifti.GiftiImage()        
     
-    M._meta.data[0].name = 'AnatomicalStructurePrimary'
-    M._meta.data[0].value = anatomicalStruct
-    M._meta.data[1].name = 'encoding'
-    M._meta.data[1].value = 'XML_BASE64_GZIP'
-    M._labeltable.labels[0].key = 0
-    M._labeltable.labels[0].label= '???'
-    M._labeltable.labels[0].red = 1.0
-    M._labeltable.labels[0].green = 1.0
-    M._labeltable.labels[0].blue = 1.0
-    M._labeltable.labels[0].alpha = 0.0
+    S = nb.gifti.gifti.GiftiImage()        
     
+    C = nb.gifti.gifti.GiftiMetaData()
+    C.data = [nb.gifti.gifti.GiftiNVPairs(name='AnatomicalStructurePrimary',value=anatomicalStruct),\
+              nb.gifti.gifti.GiftiNVPairs(name='encoding',value='XML_BASE64_GZIP')]
+    
+    E = nb.gifti.gifti.GiftiLabel()
+    E.key = 0
+    E.label= '???'
+    E.red = 1.0
+    E.green = 1.0
+    E.blue = 1.0
+    E.alpha = 0.0
+    
+    D = list()
     for i in range(Q):
-        M.darrays[i].data = np.float32(data[:,i])
-        M.darrays[i].meta.data[0].name = 'Name'
-        M.darrays[i].meta.data[0].value = columnNames[i]
-        M.darrays[i].dims = N
-        M.darrays[i].datatype = 'NIFTI_TYPE_FLOAT32'
-        M.darrays[i].Intent = 'NIFTI_INTENT_NONE'
-        M.darrays[i].coordsys.dataspace = 0
+        d = nb.gifti.gifti.GiftiDataArray()
+        d.data = np.float32(data[:,i])
+        d.meta.data = nb.gifti.gifti.GiftiNVPairs(name='Name',value=columnNames[i])
+        d.dims = N
+        d.datatype = 'NIFTI_TYPE_FLOAT32'
+        d.Intent = 'NIFTI_INTENT_NONE'
+        d.coordsys.dataspace = 0
+        D.append(d)
         
-    return(M)
+    S._meta = C
+    S._labeltable = E
+    S.darrays = D
+       
+    return S

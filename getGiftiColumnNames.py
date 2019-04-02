@@ -13,4 +13,4 @@ def getGiftiColumnNames(G):
         for i in range(len(G.darrays[n].meta.data)):
             if 'Name' in G.darrays[n].meta.data[i].name:
                 names.append(G.darrays[n].meta.data[i].value)
-                break
+    return names

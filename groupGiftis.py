@@ -6,9 +6,10 @@ Created on Mon Mar 25 08:36:34 2019
 @author: switt
 """
 import os
+import sys
 import numpy as np
 import nibabel as nb
-from . import makeFuncGifti
+from . import makeFuncGifti2
 from . import getGiftiColumnNames
 from . import getGiftiAnatomicalStruct
 
@@ -22,15 +23,10 @@ def groupGiftis(filelist,inputcol=[],outcolnames=[],\
     numRows = []
     numCols = []
     
-    inputcol = np.array(inputcol)
-    
     with open(filelist, 'r') as f:
         P = f.read()
      
-    P = P.split()
-    
-#    [d,f] = os.path.split(P[0])
-#    b = os.path.splitext(f)[0]    
+    P = P.split()   
     
     for i in range(len(P)):
         fileName = (P[i]).strip()
@@ -56,10 +52,8 @@ def groupGiftis(filelist,inputcol=[],outcolnames=[],\
         print("Number of vertices is not the same")
         
     #Determine the number of columns
-    if inputcol.size == 0:
-        inputcol = np.arange(np.amin(numCols))
-    
-    inputcol = np.array(inputcol)
+    if len(inputcol) == 0:
+        inputcol = [i for i in range(min(numCols))]
         
     numrows = np.nanmean(numRows)
     
@@ -73,20 +67,21 @@ def groupGiftis(filelist,inputcol=[],outcolnames=[],\
     if len(outcolnames) == 0:
         for col in range(len(P)):
             for i in range(len(inputcol)):
-                a = os.path.split(P[col])[1]
-                b = os.path.splitext(a)[0]
-                outcolnames.append(b)
+#                a = os.path.split(P[col])[1]
+#                b = os.path.splitext(a)[0]
+#                outcolnames.append(b)
+                outcolnames.append(str.format("col{:02d}".format(i+1)))
             
     #Reorder into new metric files
     for file in range(len(inputcol)):
         OutData = np.empty([int(numrows),int(len(M))])*np.nan
         for col in range(len(M)):
             if len(M[col].darrays[file].data) != 0:
-                Outdata[:,col] = M[col].darrays[:,inputcol[file]]
-        if (len(outfileNames) == 0 or len(outfilenames)<file):
-            outfilenames[file] = print("{}.func.gii".\
-                        format(inputColumnNames[inputcol[file]]))
-        O = makeFuncGifti.makeFuncGifti(OutData,\
+                OutData[:,col] = M[col].darrays[inputcol[file]].data
+        if (len(outfilenames) == 0 or len(outfilenames)<file):
+            outfilenames.append(str.format("{}.func.gii".\
+                        format(inputColumnNames[inputcol[file]])))
+        O = makeFuncGifti2.makeFuncGifti(OutData,\
                                              columnNames=outcolnames,\
                                              anatomicalStruct=anatStruct)
         nb.save(O,outfilenames[file])
@@ -95,7 +90,7 @@ def groupGiftis(filelist,inputcol=[],outcolnames=[],\
         
     #If Summary file name is given
     if len(groupsummary) != 0:
-        O = makeFuncGifti.makeFuncGifti(SumData,columNames=outcolnames,\
+        O = makeFuncGifti2.makeFuncGifti(SumData,columNames=outcolnames,\
                                anatomicalStruct=anatStruct)
         nb.save(O,groupsummary)
         

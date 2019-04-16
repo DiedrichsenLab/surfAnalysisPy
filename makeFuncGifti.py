@@ -15,14 +15,11 @@ def makeFuncGifti(data,anatomicalStruct='CortexLeft',columnNames=[]):
     #Make columnNames if empty
     if data.shape[0] == 0:
         for i in range(Q):
-            columnNames.append("col_{:02d}".format(i+1))
+            columnNames.append("col_{:02d}".format(i+1))       
     
-    
-    S = nb.gifti.gifti.GiftiImage()        
-    
-    C = nb.gifti.gifti.GiftiMetaData()
-    C.data = [nb.gifti.gifti.GiftiNVPairs(name='AnatomicalStructurePrimary',value=anatomicalStruct),\
-              nb.gifti.gifti.GiftiNVPairs(name='encoding',value='XML_BASE64_GZIP')]
+    C = nb.gifti.GiftiMetaData.from_dict({
+    'AnatomicalStructurePrimary': anatomicalStruct,
+    'encoding': 'XML_BASE64_GZIP'})
     
     E = nb.gifti.gifti.GiftiLabel()
     E.key = 0
@@ -34,17 +31,15 @@ def makeFuncGifti(data,anatomicalStruct='CortexLeft',columnNames=[]):
     
     D = list()
     for i in range(Q):
-        d = nb.gifti.gifti.GiftiDataArray()
-        d.data = np.float32(data[:,i])
-        d.meta.data = nb.gifti.gifti.GiftiNVPairs(name='Name',value=columnNames[i])
-        d.dims = N
-        d.datatype = 'NIFTI_TYPE_FLOAT32'
-        d.Intent = 'NIFTI_INTENT_NONE'
-        d.coordsys.dataspace = 0
+        d = nb.gifti.GiftiDataArray(
+        data=np.float32(data[:, i]),
+        intent='NIFTI_INTENT_NONE',
+        datatype='NIFTI_TYPE_FLOAT32',
+        meta=nb.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
+        )
         D.append(d)
         
-    S._meta = C
-    S._labeltable = E
-    S.darrays = D
+    S = nb.gifti.GiftiImage(meta=C, darrays=D)
+    S.labeltable.labels.append(E)
        
     return S

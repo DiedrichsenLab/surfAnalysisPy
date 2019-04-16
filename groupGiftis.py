@@ -34,7 +34,7 @@ def groupGiftis(filelist,inputcol=[],outcolnames=[],\
             print("File {} does not exist; replacing with NaNs".\
                   format(fileName))
             numCols.append(np.nan)
-            numRow.array(np.nan)
+            numRows.array(np.nan)
         else:
             A=nb.load(fileName)
             M.append(A)

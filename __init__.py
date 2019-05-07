@@ -9,3 +9,6 @@ from surfAnalysisPy import getGiftiColumnNames
 from surfAnalysisPy import makeFuncGifti
 from surfAnalysisPy import resliceFS2WB
 from surfAnalysisPy import groupGiftis
+from surfAnalysisPy import vol2surf
+from surfAnalysisPy import coords2linvoxelidxs
+from surfAnalysisPy import subs2inds

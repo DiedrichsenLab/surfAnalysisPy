@@ -50,7 +50,7 @@ def coords2linvoxelidxs(coords,volDef):
     ijk = np.linalg.lstsq(mat,coords,rcond=-1)[0]
     ijk = np.rint(ijk)
     
-    allinidxs = subs2inds(dim,np.transpose(ijk))
+    allinidxs = subs2inds.subs2inds(dim,np.transpose(ijk))
     linidxs = allinidxs
     
     linidxsrs = np.transpose(np.reshape(linidxs,[nCoordsPerNode,nVerts]))

@@ -11,24 +11,20 @@ import sys
 import numpy as np
 import nibabel as nb
 from scipy import sparse
-from casadi import sparsity
+from casadi import sparsify
 from . import coords2linvoxelidxs
 
 def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThres=0,columnNames=[],\
-             depths=np.arange(0,1.2,0.2),interp=0,anatomicalStruct='CortexLeft',\
+             depths=[0,0.2,0.4,0.6,0.8,1.0],interp=0,anatomicalStruct='CortexLeft',\
              stats='nanmean'):
     
-    class struct:
-        Tiles = []
-        Edges = []
-        numNodes = []
-        data = []
-
+    
     A = []
     firstGood = []
     indices = []
     S = struct()
     M = struct()
+    depths = np.array(depths)
     
 
     numPoints = len(depths)
@@ -41,6 +37,14 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
     faces = whiteSurfGiftiImage.darrays[1].data
     
     numVerts = len(c1[1])
+    
+    
+    class struct:
+        Tiles = []
+        Edges = []
+        numNodes = []
+        data = []
+
     
     if ([len(c1[1]),len(c2[1])] != [numVerts,numVerts]):
         sys.exit('Vertex matrices should be of shape vertices x 3')
@@ -74,7 +78,7 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
         
     for i in range(numPoints):
         c = (1-depths[i])*np.transpose(c1)+depths[i]*np.transpose(c2)
-        indices[:,i] = coords2linvoxelidxs(c,V[firstgood])
+        indices[:,i] = coords2linvoxelidxs.coords2linvoxelidxs(c,V[firstgood])
     
     # Case: excludeThres > 0
     # If necessary, now ensure that voxels are mapped on to continuous location
@@ -117,7 +121,7 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
             H = G[indx,indx]
             H = H+np.transpose(H)+sparse.identity(len(H))
             # Matlab vairable translation: p=rowPerm,q=colPerm,r=rowBlock,s=colBlock
-            nb,rowPerm,colPerm,rowBlock,colBlock,coarseRowBlock,coarseColBlock = H.sparsity().btf()
+            nb,rowPerm,colPerm,rowBlock,colBlock,coarseRowBlock,coarseColBlock = H.sparsify().btf()
             CL = np.zeros(np.shape(indx))
             for c in range(len(rowBlock)-1):
                 CL[rowPerm[rowBlock[c]]:rowBlock[(c+1)]-1,0]=c

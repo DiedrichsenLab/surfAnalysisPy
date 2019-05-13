@@ -27,7 +27,7 @@ def subs2inds(siz,pos):
     mply = np.zeros([1,dimCount],dtype=clpos)
     mply[0,0] = 1
     for k in range(dimCount-1):
-        mply[k+1] = mply[k]*siz[k]
+        mply[0][k+1] = mply[0][k]*siz[k]
         
     alot = 1e6
     if posCount>alot:
@@ -37,11 +37,12 @@ def subs2inds(siz,pos):
             ids[idxs] = subs2inds(siz,pos[idxs,:])
         return
     
-    ids = np.sum((pos-1)*np.tile(mply,(posCount,1),2,'native'))+1
+    ids = np.sum(np.multiply((pos-1),np.tile(mply,(posCount,1))),axis=1)+1
     
-    beyond = np.tile(siz,(posCount,1),1)-pos
-    outOfBounds = np.sum(((pos<1 or beyond<0),2)>0)
-    ids[outOfBounds]=np.nan
+    beyond = np.tile(siz,(posCount,1))-pos
+    outOfBounds = np.sum(np.logical_or(pos<1,beyond<0),axis=1)>0
+    if len(np.where(outOfBounds)[0]):
+        ids[np.where(outOfBounds)]=np.nan
     
     return ids
     

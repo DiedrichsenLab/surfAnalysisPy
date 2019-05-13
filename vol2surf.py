@@ -9,7 +9,7 @@ Created on Wed May  1 09:20:41 2019
 import os
 import sys
 import numpy as np
-import nibabel as nb
+import nibabel
 from scipy import sparse
 from casadi import sparsify
 from . import coords2linvoxelidxs
@@ -21,16 +21,15 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
     
     A = []
     firstGood = []
-    indices = []
-    S = struct()
-    M = struct()
+    ind = []
+    Indices = list()
     depths = np.array(depths)
     
 
     numPoints = len(depths)
     
-    whiteSurfGiftiImage = nb.load(whiteSurfGifti)
-    pialSurfGiftiImage = nb.load(pialSurfGifti)
+    whiteSurfGiftiImage = nibabel.load(whiteSurfGifti)
+    pialSurfGiftiImage = nibabel.load(pialSurfGifti)
     
     c1 = whiteSurfGiftiImage.darrays[0].data
     c2 = pialSurfGiftiImage.darrays[0].data
@@ -44,6 +43,9 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
         Edges = []
         numNodes = []
         data = []
+        
+    S = struct()
+    M = struct()
 
     
     if ([len(c1[1]),len(c2[1])] != [numVerts,numVerts]):
@@ -60,7 +62,7 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
     for i in range(len(V)):
         fileName = (V[i]).strip()
         try:
-            a = nb.load(fileName)
+            a = nibabel.load(fileName)
             A.append(a)
             if not firstGood:
                 firstGood = i  
@@ -73,12 +75,17 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
     if not firstGood:
         sys.exit('None of the images could be opened')
         
-    if (len(ignoreZeros) == 1):
+    if (ignoreZeros == 1):
         ignoreZeros = np.ones(len(V))*ignoreZeros
         
     for i in range(numPoints):
         c = (1-depths[i])*np.transpose(c1)+depths[i]*np.transpose(c2)
-        indices[:,i] = coords2linvoxelidxs.coords2linvoxelidxs(c,V[firstgood])
+        ind = coords2linvoxelidxs.coords2linvoxelidxs(c,V[firstGood])
+        Indices.append(ind)
+        
+    indices = np.transpose(np.squeeze(np.asarray(Indices)))
+    indices = indices.astype(int)
+#    indices = indices.reshape(-1)
     
     # Case: excludeThres > 0
     # If necessary, now ensure that voxels are mapped on to continuous location
@@ -150,8 +157,10 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
         nb.save(np.reshape(exclude,np.array(Vexcl.shape)),'excl.nii')
         
     # Case: excludeThres = 0
-    i = np.where(np.isfinite(indices))
-    data = np.zeros(len(indices))*np.nan
+    data = np.zeros(indices.shape)*np.nan
+    M.data = np.empty([len(data),len(V)])
+    indices = indices.reshape(-1)
+    i = np.asarray(np.where(np.isfinite(indices))[0])
     
     for v in range(len(V)):
         if not V[v]:
@@ -160,8 +169,9 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
             X = V[v].get_data()
             if (ignoreZeros>0):
                 X[X==0] = np.nan
-            data[i] = X[indices[i]]
-            M.data[:,v] = np.nanmean(data)
+            X = X.reshape(-1)
+            data = np.reshape((X[indices[i]]),(-1,6))
+            M.data[:,v] = np.nanmean(data,axis=1)
             
     # Determine the column names based on the filenames of the volumes
     if not columnNames:
@@ -169,32 +179,35 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
             if not V[i]:
                 columnNames[i] = 'void'
             else:
-                columnNames[i] = os.path.splitext(V[i].get_filename)[0]
+                fName = V[i].get_filename()
+                cName = os.path.splitext(os.path.split(fName)[1])[0]
+                columnNames.append(cName)
                 
     # Build a functional GIFTI structure
-    C = nb.gifti.GiftiMetaData.from_dict({'AnatomicalStructurePrimary': anatomicalStruct,
+    C = nibabel.gifti.GiftiMetaData.from_dict({'AnatomicalStructurePrimary': anatomicalStruct,
                                           'encoding': 'XML_BASE64_GZIP'})
-    E = nb.gifti.gifti.GiftiLabel(
-    key = 0,
-    label= '???',
-    red = 1.0,
-    green = 1.0,
-    blue = 1.0,
-    alpha = 0.0,
-    )
+    E = nibabel.gifti.gifti.GiftiLabel()
+    E.key = 0
+    E.label= '???'
+    E.red = 1.0
+    E.green = 1.0
+    E.blue = 1.0
+    E.alpha = 0.0
     
-    for i in range(V):
-        D = nb.gifti.GiftiDataArray(
-        data=np.single(M.data[:,i]),
-        shape=len(M.data[:,i]),
+    D = list()
+    for i in range(len(V)):
+        d = nibabel.gifti.GiftiDataArray(
+        data=np.float32(M.data[:,i]),
+#        shape=len(M.data[:,i]),
         intent='NIFTI_INTENT_NONE',
         datatype='NIFTI_TYPE_FLOAT32',
-        meta=nb.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
+        meta=nibabel.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
         )
+        D.append(d)
         
-    S = nb.gifti.GiftiImage(meta=C, darrays=D)
+    S = nibabel.gifti.GiftiImage(meta=C, darrays=D)
     S.labeltable.labels.append(E)
-    nb.save(S)
+    nibabel.save(S, 'vol2surfOut.func.gii')
             
         
         

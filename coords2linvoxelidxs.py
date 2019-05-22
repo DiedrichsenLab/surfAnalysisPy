@@ -46,7 +46,6 @@ def coords2linvoxelidxs(coords,volDef):
     # map to 3xP matrix (P coordinates)
     coords = np.reshape(coords,[3,-1])
     coords = np.vstack([coords,np.ones((1,rs[1]))])
-    return coords
     
     ijk = np.linalg.lstsq(mat,coords,rcond=-1)[0]
     ijk = np.rint(ijk)[0:3,:]
@@ -56,7 +55,7 @@ def coords2linvoxelidxs(coords,volDef):
     
     linidxsrs = np.transpose(np.reshape(linidxs,[nCoordsPerNode,nVerts]))
     
-#    return linidxsrs
+    return linidxsrs
     
     
     

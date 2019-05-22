@@ -16,10 +16,11 @@ from . import affineTransform
 def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
                  smoothing=1,surfFiles=["white","pial","inflated"],\
                  curvFiles=["curv","sulc","area"],hemisphere=[0,1],\
-                 alignSurf=[1,1,1]):
+                 alignSurf=[1,1,1],resolution="32k"):
     
     hemisphere = np.array(hemisphere)
     alignSurf = np.array(alignSurf)
+    
     
     structName = ["left","right"]
     hem = ["lh","rh"]
@@ -90,14 +91,14 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
             
             if len(subjName) == 0:
                 outName = os.path.join(newDir,('.'.join((Hem[h],surfFiles[i],\
-                                                         '164k.surf.gii'))))
+                                                         resolution,'surf.gii'))))
             else:
                 outName = os.path.join(newDir,('.'.join((subjName,Hem[h],\
-                                                         surfFiles[i],'164k.surf.gii'))))
+                                                         surfFiles[i],resolution,'surf.gii'))))
                 
             atlasName = os.path.join(atlasDir,"resample_fsaverage",\
-                                      ('.'.join(("fs_LR-deformed_to-fsaverage",\
-                                                Hem[h],"sphere.164k_fs_LR.surf.gii"))))
+                                      (''.join(("fs_LR-deformed_to-fsaverage.",\
+                                                Hem[h],".sphere.",resolution,"_fs_LR.surf.gii"))))
             
 
             subprocess.run(["mris_convert", ('.'.join((hem[h],surfFiles[i]))),fileName])
@@ -107,8 +108,6 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
                              fileName,regSphere,atlasName,\
                              "BARYCENTRIC",outName])
             
-
-    #Not sure I have the correct CoordinateSystemTransformMatrix...
             A = nb.load(outName)
             if (alignSurf[i]):
                 [A.darrays[0].coordsys.xform[:,0],A.darrays[0].coordsys.xform[:,1],\
@@ -124,22 +123,18 @@ def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
         for i in range(numCurv):
             #Set up file names
             fileName = '.'.join((hem[h],curvFiles[i],"shape.gii"))
-            
             if len(subjName) == 0:
                 outName = os.path.join(newDir,('.'.join((Hem[h],curvFiles[i],\
-                                                         "164k.shape.gii"))))
+                                                         resolution,"shape.gii"))))
             else:
                 outName = os.path.join(newDir,('.'.join((subjName,Hem[h],\
-                                                         curvFiles[i],"164k.shape.gii"))))
-                
+                                                         curvFiles[i],resolution,"shape.gii"))))
             atlasName = os.path.join(atlasDir,"resample_fsaverage",\
-                                     ('.'.join(("fs_LR-deformed_to-fsaverage",\
-                                               Hem[h],"sphere.164k_fs_LR.surf.gii"))))
-            
-            #Convert surface to Gifti
+                                     (''.join(("fs_LR-deformed_to-fsaverage.",\
+                                               Hem[h],".sphere.",resolution,"_fs_LR.surf.gii"))))
+                
             subprocess.run(["mris_convert", "-c", ('.'.join((hem[h],curvFiles[i]))),\
                             ('.'.join((hem[h],surfFiles[0]))), fileName])
-           
             subprocess.run(["wb_command", "-metric-resample",\
                              fileName, regSphere, atlasName, "BARYCENTRIC", outName])           
             

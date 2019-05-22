@@ -85,76 +85,77 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
         
     indices = np.transpose(np.squeeze(np.asarray(Indices)))
     indices = indices.astype(int)
+    return indices
 #    indices = indices.reshape(-1)
     
     # Case: excludeThres > 0
     # If necessary, now ensure that voxels are mapped on to continuous location
     # only on the flat map - exclude voxels that are assigned to two sides of
     # the sulcus    
-    if (excludeThres>0):
-        exclude = np.zeros([np.prod(V[1].shape),1])
-        if not faces:
-            sys.exit('provide faces (topology data), so that projections should be avoided')
-        S.Tiles = faces
+#    if (excludeThres>0):
+#        exclude = np.zeros([np.prod(V[1].shape),1])
+#        if not faces:
+#            sys.exit('provide faces (topology data), so that projections should be avoided')
+#        S.Tiles = faces
         
         # Precalculate edges for fast cluster finding
-        print('Calculating edges.')
-        S.numNodes = np.max(np.max(S.Tiles))
-        for i in range (3):
-            i1 = S.Tiles[:,i]
-            i2 = S.Tiles[:,np.remainder(i,3)+1]
-            S.Edges.append(i1,i2)
-        S.Edges = np.unique(S.Edges,axis=0)
+#        print('Calculating edges.')
+#        S.numNodes = np.max(np.max(S.Tiles))
+#        for i in range (3):
+#            i1 = S.Tiles[:,i]
+#            i2 = S.Tiles[:,np.remainder(i,3)+1]
+#            S.Edges.append(i1,i2)
+#        S.Edges = np.unique(S.Edges,axis=0)
         
         # Generate connectivity matrix
         # csr_matrix((data, (row_ind, col_ind)), [shape=(M, N)])
-        data = np.ones(len(S.Edges))
-        rowInd = S.Edges[:,0]
-        colInd = S.Edges[:,1]
-        M = S.numNodes
-        G = sparse.csr_matrix((data,(rowInd,colInd)),shape=(M,M))
+#        data = np.ones(len(S.Edges))
+#        rowInd = S.Edges[:,0]
+#        colInd = S.Edges[:,1]
+#        M = S.numNodes
+#        G = sparse.csr_matrix((data,(rowInd,colInd)),shape=(M,M))
         
         # Cluster the projections to the surface and exclude all voxels
         # in which the weight of the biggest cluster is not > thres
-        print('Checking projections.')
-        I = np.unique(indices[np.isfinite(indices)])
-        for i in I:
+#        print('Checking projections.')
+#        I = np.unique(indices[np.isfinite(indices)])
+#        for i in I:
             
             # Calculate the weight of voxel on node
-            weight = np.sum(indices==1,1)
-            indx = np.where(weight>0)[0]
+#            weight = np.sum(indices==1,1)
+#            indx = np.where(weight>0)[0]
             
             # Check whether the nodes cluster
-            H = G[indx,indx]
-            H = H+np.transpose(H)+sparse.identity(len(H))
+#            H = G[indx,indx]
+#            H = H+np.transpose(H)+sparse.identity(len(H))
             # Matlab vairable translation: p=rowPerm,q=colPerm,r=rowBlock,s=colBlock
-            nb,rowPerm,colPerm,rowBlock,colBlock,coarseRowBlock,coarseColBlock = H.sparsify().btf()
-            CL = np.zeros(np.shape(indx))
-            for c in range(len(rowBlock)-1):
-                CL[rowPerm[rowBlock[c]]:rowBlock[(c+1)]-1,0]=c
+#            nb,rowPerm,colPerm,rowBlock,colBlock,coarseRowBlock,coarseColBlock = H.sparsify().btf()
+#            CL = np.zeros(np.shape(indx))
+#            for c in range(len(rowBlock)-1):
+#                CL[rowPerm[rowBlock[c]]:rowBlock[(c+1)]-1,0]=c
             
-            if (np.max(CL)>1):
-                weight_cl=np.zeros([np.max(CL),1])
-                for cl in range(np.max(CL)):
-                    weight_cl[cl,0] = np.sum(weight[indx[CL==cl]])
-                [m,cl] = np.max(weight_cl)
-                if (m/np.sum(weight_cl)>excludeThres):
-                    A = indices[indx[CL!=cl],:]
-                    A[A==i] = np.nan
-                    indices[indx[CL!=cl],:] = A
-                    exclude[i] = 1
-                    print('assigned: %2.3f'.format(m/np.sum(weight_cl)))
-                else:
-                    A[A==i] = np.nan
-                    indices[indx,:] = A
-                    exclude[i] = 2
-                    print('excluded: %2.3f %d'.format(m/np.sum(weight_cl),np.max(CL)))
+#            if (np.max(CL)>1):
+#                weight_cl=np.zeros([np.max(CL),1])
+#                for cl in range(np.max(CL)):
+#                    weight_cl[cl,0] = np.sum(weight[indx[CL==cl]])
+#                [m,cl] = np.max(weight_cl)
+#                if (m/np.sum(weight_cl)>excludeThres):
+#                    A = indices[indx[CL!=cl],:]
+#                    A[A==i] = np.nan
+#                    indices[indx[CL!=cl],:] = A
+#                    exclude[i] = 1
+#                    print('assigned: %2.3f'.format(m/np.sum(weight_cl)))
+#                else:
+#                    A[A==i] = np.nan
+#                    indices[indx,:] = A
+#                    exclude[i] = 2
+#                    print('excluded: %2.3f %d'.format(m/np.sum(weight_cl),np.max(CL)))
                     
         # For debugging: save the volume showing the exluded voxels in current
         # directory
-        Vexcl = V[1]
-        Vexcl.set_filename = 'excl.nii'
-        nb.save(np.reshape(exclude,np.array(Vexcl.shape)),'excl.nii')
+#        Vexcl = V[1]
+#        Vexcl.set_filename = 'excl.nii'
+#        nb.save(np.reshape(exclude,np.array(Vexcl.shape)),'excl.nii')
         
     # Case: excludeThres = 0
     data = np.zeros(indices.shape)*np.nan

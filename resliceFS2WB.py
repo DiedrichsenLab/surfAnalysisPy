@@ -7,16 +7,21 @@ Created on Wed Mar 20 14:10:56 2019
 """
 import os
 import re
+import pathlib
 import numpy as np
 import subprocess
 import nibabel as nb
 from . import affineTransform
 
 
-def resliceFS2WB(subjName,subjDir,atlasDir,outDir,\
+def resliceFS2WB(subjName,subjDir,outDir,\
                  smoothing=1,surfFiles=["white","pial","inflated"],\
                  curvFiles=["curv","sulc","area"],hemisphere=[0,1],\
                  alignSurf=[1,1,1],resolution="32k"):
+    
+    BASE_DIR = pathlib.Path('surfAnalysisPy').resolve()
+    atlasDir = BASE_DIR.joinpath('standard_mesh')
+    
     
     hemisphere = np.array(hemisphere)
     alignSurf = np.array(alignSurf)

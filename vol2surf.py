@@ -3,7 +3,64 @@
 """
 Created on Wed May  1 09:20:41 2019
 
-@author: switt
+Maps functional volume data onto a surface, defined by white and pial surface.
+
+INPUTS:
+c1:                   Px3 Matrix of Vertices x,y,z coordinates on the white surface
+c2:                   Px3 Matrix of Vertices x,y,z coordinates on the pial surface
+funcFileList:         Text file of full paths of volumetric nifti files to be mapped
+ 
+VARARGIN:
+ignoreZeros:          Should zeros be ignored? 
+                      DEFAULT: 0 (Set to 1 for F and accuracy.)
+columnNames:          List of columnNames for metric file.
+                      DEFAULT: empty list
+depths:               Depths of points along line at which to map (0=white/gray, 1=pial).
+                      DEFAULT: [0.0,0.2,0.4,0.6,0.8,1.0]
+interp:               Interpolation: 0=nearest neighbour, 1=trilinear
+                      DEFAULT: 0 (Currently only nearest neighbor is supported.)
+stats:                Statistics to be evaluated.
+                      @(x)nanmean(x,2) default and used for activation data 
+                      @(x)mode(x,2) used when discrete labels are sampled. The most frequent label is assigned.
+                      DEFAULT: 'nanmean'
+excludeThres:         Threshold enables the exclusion of voxels that touch the surface in two distinct places 
+                      (e.g., voxels that lie in the middle of a sulcus). If a voxel projects to two separate place 
+                      on the surface, the algorithm excludes it, if the proportion of the bigger cluster
+                      is smaller than the threshold. (i.e. threshold = 0.9 means that the voxel has to
+                      lie at least to 90% on one side of the sulcus).
+                      **** Currently not supported.  excludeThres is automatically reset to 0. ****
+                      DEFAULT: 0 
+faces:                For threshold exclusion, you need to provide the faces data from the surface (numFaces x 3 matrix)
+                      DEFAULT: empty array
+anatomicalStruct:     'Cerebellum','CortexLeft','CortexRight'
+                      DEFAULT: 'CortexLeft'
+
+OUTPUT:
+M:                    Gifti object- can be saved as a *.func.gii or *.label.gii file 
+
+Function enables mapping of volume-based data onto the vertices of a
+surface. For each vertex, the function samples the volume along the line 
+connecting the white and gray matter surfaces. The points along the line
+are specified in the variable 'depths'. default is to sample at 5
+locations between white an gray matter surface. Set 'depths' to 0 to
+sample only along the white matter surface, and to 0.5 to sample along
+the mid-gray surface. 
+
+The averaging across the sampled points for each vertex is dictated by
+the variable 'stats'. For functional activation, use 'mean' or
+'nanmean'. For discrete label data, use 'mode'. 
+
+If 'exclude_thres' is set to a value >0, the function will exclude voxels that 
+touch the surface at multiple locations - i.e. voxels within a sulcus
+that touch both banks. Set this option, if you strongly want to prevent
+spill-over of activation across sulci. Not recommended for voxels sizes
+larger than 3mm, as it leads to exclusion of much data. 
+ 
+For alternative functionality see wb_command volumne-to-surface-mapping 
+https://www.humanconnectome.org/software/workbench-command/-volume-to-surface-mapping
+ 
+@author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
+
 """
 
 import os
@@ -16,7 +73,7 @@ from . import coords2linvoxelidxs
 
 def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThres=0,columnNames=[],\
              depths=[0,0.2,0.4,0.6,0.8,1.0],interp=0,anatomicalStruct='CortexLeft',\
-             stats='nanmean'):
+             stats='nanmean',faces=[]):
     
     
     A = []
@@ -25,6 +82,13 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
     Indices = list()
     depths = np.array(depths)
     
+    if excludeThres != 0:
+        print('Warning: excludeThres option currently not supported. Resetting excludeThres to 0.')
+        excludeThres = 0
+
+    if interp == 1:
+        print('Warning: trilinear interpolation not supported.  Resetting interp to nearest neighbor.')
+        interp = 0
 
     numPoints = len(depths)
     
@@ -49,10 +113,10 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
 
     
     if ([len(c1[1]),len(c2[1])] != [numVerts,numVerts]):
-        sys.exit('Vertex matrices should be of shape vertices x 3')
+        sys.exit('Error: Vertex matrices should be of shape: vertices x 3.')
         
     if (len(c1[0]) != len(c2[0])):
-        sys.exit('White and pial surfaces should have same number of vertices')
+        sys.exit('Error: White and pial surfaces should have same number of vertices.')
         
     with open(funcFileList, 'r') as f:
         V = f.read()
@@ -67,13 +131,13 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
             if not firstGood:
                 firstGood = i  
         except:
-           print('{} could not be opened'.format(fileName))
+           print('Warning: {} could not be opened.'.format(fileName))
            A.append('')
            
     V = A
     
     if not firstGood:
-        sys.exit('None of the images could be opened')
+        sys.exit('Error: None of the images could be opened.')
         
     if (ignoreZeros == 1):
         ignoreZeros = np.ones(len(V))*ignoreZeros
@@ -85,8 +149,7 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
         
     indices = np.transpose(np.squeeze(np.asarray(Indices)))
     indices = indices.astype(int)
-    return indices
-#    indices = indices.reshape(-1)
+
     
     # Case: excludeThres > 0
     # If necessary, now ensure that voxels are mapped on to continuous location
@@ -172,8 +235,11 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
                 X[X==0] = np.nan
             X = X.reshape(-1)
             data = np.reshape((X[indices[i]]),(-1,6))
-            M.data[:,v] = np.nanmean(data,axis=1)
-            
+            if stats == 'nanmean': 
+                M.data[:,v] = np.nanmean(data,axis=1)
+            elif stats == 'mode'
+                M.data[:,v] = np.mode(data,axis=1)
+
     # Determine the column names based on the filenames of the volumes
     if not columnNames:
         for i in range(len(V)):
@@ -199,7 +265,6 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
     for i in range(len(V)):
         d = nibabel.gifti.GiftiDataArray(
         data=np.float32(M.data[:,i]),
-#        shape=len(M.data[:,i]),
         intent='NIFTI_INTENT_NONE',
         datatype='NIFTI_TYPE_FLOAT32',
         meta=nibabel.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
@@ -208,7 +273,7 @@ def vol2surf(whiteSurfGifti,pialSurfGifti,funcFileList,ignoreZeros=0,excludeThre
         
     S = nibabel.gifti.GiftiImage(meta=C, darrays=D)
     S.labeltable.labels.append(E)
-    nibabel.save(S, 'vol2surfOut.func.gii')
+    nibabel.save(S,'vol2surfOut.func.gii')
             
         
         

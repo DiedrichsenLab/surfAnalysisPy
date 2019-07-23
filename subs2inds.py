@@ -3,7 +3,31 @@
 """
 Created on Wed May  1 17:03:22 2019
 
-@author: switt
+Linear indices from multiple subscripts; a generalization of sub2ind
+
+Function returns the linear indices for each row of subscripts in 
+pos based on a matrix with dimensions siz.
+
+INPUT:
+siz:        Nibabel gifti object attribute .shape (1x3 volume dimension in voxels)        
+pos:        Matrix of subindices referring to a single element
+
+OUTPUT:
+ids:        Vector of linear indices
+
+If siz=[s1, ..., sn] refers to a matrix of size s1 x ... x sN, and pos is
+an M x N where each row contains the subindices referring to a single
+element, then ids is a M x 1 vector with linear indices.
+
+For indices in pos that are out of bounds, the corresponding element in ids
+is NaN. If pos is of type int32, however, the corresponding element is set
+to zero.
+
+If pos=[p1 ... pN] (i.e. M==1) and [p1,...,pN]=sub2ind(SIZ,IS), then
+    [p1,...,pN]=SURFING_SUBS2INDS(siz,ids)
+
+@author: NNO May 2009, updated June 2010 (Python conversion: switt)
+
 """
 
 import os
@@ -17,13 +41,15 @@ def subs2inds(siz,pos):
     [posCount,dimCount2] = np.shape(pos)
     
     if (dimCount != dimCount2):
-        sys.exit('Number of dimensions do not match')
-        
-    clpos = pos.dtype
-    clsiz = siz.dtype 
-    if (clpos != clsiz):
-        siz = siz.astype(clpos)
-        
+        sys.exit('Error: Number of dimensions do not match.')
+    
+    # Make sure pos and siz have same data type class    
+    posClass = pos.dtype
+    sizClass = siz.dtype 
+    if (posClass != sizClass):
+        siz = siz.astype(posClass)
+    
+    # Multiplication factors for the different positions    
     mply = np.zeros([1,dimCount],dtype=clpos)
     mply[0,0] = 1
     for k in range(dimCount-1):

@@ -3,7 +3,15 @@
 """
 Created on Mon Mar 25 21:11:31 2019
 
-@author: switt
+Returns the column names from a functional gifti file.
+
+INPUT:
+G:				Nibabel gifti object
+
+OUTPUT:
+names:			List of column names from gifti object attribute data arrays
+
+@author: jdiedrichsen (Python conversion: switt)
 """
 
 def getGiftiColumnNames(G):

@@ -3,7 +3,15 @@
 """
 Created on Mon Mar 25 21:03:53 2019
 
-@author: switt
+Returns the primary anatomical structure for a gifti object.
+
+INPUT:
+G:				Nibabel gifti object
+
+OUTPUT:
+anatStruct:		AnatomicalStructurePrimary attribute from gifti object
+
+@author: jdiedrichsen (Python conversion: switt)
 """
 
 def getGiftiAnatomicalStruct(G):

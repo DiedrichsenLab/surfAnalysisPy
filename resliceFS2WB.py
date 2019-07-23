@@ -26,7 +26,7 @@ INPUT:
    'resolution'        : Resolution can be either set to '164k' or '32k'.
                        Default =  "32k"
 
-@author: jdiedrichsen, switt
+@author: jdiedrichsen (Python conversion: switt)
 """
 import os
 import re
@@ -60,7 +60,7 @@ def resliceFS2WB(subjName,subjDir,outDir,\
     if not subjDir:
         subjDir = os.getenv("SUBJECTS_DIR")
     
-    # read in freesurfer version
+    # Read in freesurfer version
     freesurferVersionFile = os.path.join(os.getenv("FREESURFER_HOME"),"build-stamp.txt") 
     f = open(freesurferVersionFile, 'r')
     freesurferVersionString = f.readline()
@@ -69,7 +69,7 @@ def resliceFS2WB(subjName,subjDir,outDir,\
     freesurferVersionString = re.split('[ -F]+', freesurferVersionString)
     freesurferVersion = freesurferVersionString[5]
     
-    # create new output directory for subject
+    # Create new output directory for subject
     subjOutDir = os.path.join(outDir,subjName)
     if not subjOutDir:
         os.mkdir(subjOutDir)
@@ -78,12 +78,10 @@ def resliceFS2WB(subjName,subjDir,outDir,\
     numCurvFiles = len(curvFiles)
     os.chdir(os.path.join(subjDir,subjName,"surf"))
     
-    #---------------------
-    #Figure out the shifting of coordinate systems:
+    # Figure out the shifting of coordinate systems:
     # Freesurfer uses vertex coordinates in respect to
-    # the center of the 256x256x256 image.
-    # Independent of the real zero point in the original image
-    # So to find a transform of the
+    # the center of the 256x256x256 image, independent
+    # of the real zero point in the original image.
     # vox2surfTransformMatrix: Transform of voxels in 256x256 image to surface vertices
     # vox2spaceTransformMatrix: Transform of voxel to subject space
 
@@ -102,18 +100,16 @@ def resliceFS2WB(subjName,subjDir,outDir,\
     vox2spaceTransformMatrix = mriInfoVox2RasProcessOutput.reshape(-1,4)
     surf2spaceTransformMatrix = np.matmul(vox2spaceTransformMatrix,np.linalg.inv(vox2surfTransformMatrix))
     
-    #---------------------
-    #Transform the surfaces from the two hemispheres
+    # Transform the surfaces from the two hemispheres
     for h in hemisphere:
         #Convert regSphere
         regSphere = '.'.join((hem[h],"sphere.reg.surf.gii"))
 
         subprocess.call(["mris_convert", ('.'.join((hem[h],"sphere.reg"))),regSphere])
         
-    #-----------------------
-    #Transform all the surface files
+    # Transform all the surface files
         for i in range(numSurfFiles):
-            #Set up file names
+            # Set up file names
             fileName = '.'.join((hem[h],surfFiles[i],"surf.gii"))
             
             if len(subjName) == 0:
@@ -146,10 +142,9 @@ def resliceFS2WB(subjName,subjDir,outDir,\
                 
             nb.save(surfGifti,surfGiftiFileName)
             
-    #-------------------------
-    #Transform all the curvature files
+    # Transform all the curvature files
         for i in range(numCurvFiles):
-            #Set up file names
+            # Set up file names
             fileName = '.'.join((hem[h],curvFiles[i],"shape.gii"))
             if len(subjName) == 0:
                 curvGiftiFileName = os.path.join(subjOutDir,('.'.join((Hem[h],curvFiles[i],\

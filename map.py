@@ -11,9 +11,8 @@ import os
 import sys
 import numpy as np
 import nibabel as nb
-from . import subs2inds
 from scipy import sparse
-from casadi import sparsify
+#from casadi import sparsify
 
 def affine_transform(x1,x2,x3,M):
     """
@@ -144,7 +143,7 @@ def coords_to_linvoxelidxs(coords,volDef):
     return linidxsrs
 
 
-def vol_to_surf(whiteSurfGifti, pialSurfGifti, fileList, ignoreZeros=0,
+def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
             excludeThres=0,columnNames=[],depths=[0,0.2,0.4,0.6,0.8,1.0],
             interp=0,anatomicalStruct='CortexLeft',stats='nanmean',faces=[]):
     """
@@ -173,9 +172,13 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, fileList, ignoreZeros=0,
     @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
 
     INPUTS:
-        c1: Px3 Matrix of Vertices x,y,z coordinates on the white surface
-        c2: Px3 Matrix of Vertices x,y,z coordinates on the pial surface
-        fileList: List of full paths of volumetric nifti files to be mapped
+        whiteSurfGifti (string or nibabel.GiftiImage): 
+            White surface, filename or loaded gifti object 
+        pialSurfGifti (string or nibabel.GiftiImage):
+            Pial surface, filename or loaded gifti object 
+        volumes (list): 
+            List of filenames, or nibable.NiftiImage  to be mapped
+    OPTIONAL: 
         ignoreZeros:          Should zeros be ignored?
                           DEFAULT: 0 (Set to 1 for F and accuracy.)
         columnNames:          List of columnNames for metric file.
@@ -196,13 +199,10 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, fileList, ignoreZeros=0,
                       lie at least to 90% on one side of the sulcus).
                       **** Currently not supported.  excludeThres is automatically reset to 0. ****
                       DEFAULT: 0
-        faces:                For threshold exclusion, you need to provide the faces data from the surface (numFaces x 3 matrix)
-                      DEFAULT: empty array
-        anatomicalStruct:     'Cerebellum','CortexLeft','CortexRight'
-                      DEFAULT: 'CortexLeft'
 
     OUTPUT:
-            M: Gifti object- can be saved as a *.func.gii or *.label.gii file
+        mappedData (nibabel.GiftiImage): 
+            Gifti object- can be saved as a *.func.gii or *.label.gii file
     """
 
     A = []
@@ -221,8 +221,8 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, fileList, ignoreZeros=0,
 
     numPoints = len(depths)
 
-    whiteSurfGiftiImage = nibabel.load(whiteSurfGifti)
-    pialSurfGiftiImage = nibabel.load(pialSurfGifti)
+    whiteSurfGiftiImage = nb.load(whiteSurfGifti)
+    pialSurfGiftiImage = nb.load(pialSurfGifti)
 
     c1 = whiteSurfGiftiImage.darrays[0].data
     c2 = pialSurfGiftiImage.darrays[0].data
@@ -230,29 +230,13 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, fileList, ignoreZeros=0,
 
     numVerts = len(c1[1])
 
-
-    class struct:
-        Tiles = []
-        Edges = []
-        numNodes = []
-        data = []
-
-    S = struct()
-    M = struct()
-
-
     if ([len(c1[1]),len(c2[1])] != [numVerts,numVerts]):
         sys.exit('Error: Vertex matrices should be of shape: vertices x 3.')
 
     if (len(c1[0]) != len(c2[0])):
         sys.exit('Error: White and pial surfaces should have same number of vertices.')
 
-    with open(funcFileList, 'r') as f:
-        V = f.read()
-
-    V = V.split()
-
-    for i in range(len(V)):
+    for i in range(len(volumes)):
         fileName = (V[i]).strip()
         try:
             a = nibabel.load(fileName)
@@ -366,7 +350,7 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, fileList, ignoreZeros=0,
             data = np.reshape((X[indices[i]]),(-1,6))
             if stats == 'nanmean':
                 M.data[:,v] = np.nanmean(data,axis=1)
-            elif stats == 'mode'
+            elif stats == 'mode':
                 M.data[:,v] = np.mode(data,axis=1)
 
     # Determine the column names based on the filenames of the volumes

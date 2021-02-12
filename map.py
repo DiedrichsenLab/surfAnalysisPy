@@ -9,7 +9,6 @@ Created on Fri Mar 22 09:15:59 2019
 import numpy as np
 import os
 import sys
-import numpy as np
 import nibabel as nb
 from scipy import sparse
 #from casadi import sparsify
@@ -132,15 +131,15 @@ def coords_to_linvoxelidxs(coords,volDef):
     coords = np.reshape(coords,[3,-1])
     coords = np.vstack([coords,np.ones((1,rs[1]))])
 
-    ijk = np.linalg.lstsq(mat,coords,rcond=-1)[0]
+    ijk = np.linalg.solve(mat,coords)
     ijk = np.rint(ijk)[0:3,:]
 
-    allinidxs = subs_to_inds(dim,np.transpose(ijk))
-    linidxs = allinidxs
+    # allinidxs = subs_to_inds(dim,np.transpose(ijk))
+    # linidxs = allinidxs
 
-    linidxsrs = np.transpose(np.reshape(linidxs,[nCoordsPerNode,nVerts]))
+    # linidxsrs = np.transpose(np.reshape(linidxs,[nCoordsPerNode,nVerts]))
 
-    return linidxsrs
+    return ijk
 
 
 def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
@@ -172,13 +171,13 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
     @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
 
     INPUTS:
-        whiteSurfGifti (string or nibabel.GiftiImage): 
-            White surface, filename or loaded gifti object 
+        whiteSurfGifti (string or nibabel.GiftiImage):
+            White surface, filename or loaded gifti object
         pialSurfGifti (string or nibabel.GiftiImage):
-            Pial surface, filename or loaded gifti object 
-        volumes (list): 
+            Pial surface, filename or loaded gifti object
+        volumes (list):
             List of filenames, or nibable.NiftiImage  to be mapped
-    OPTIONAL: 
+    OPTIONAL:
         ignoreZeros:          Should zeros be ignored?
                           DEFAULT: 0 (Set to 1 for F and accuracy.)
         columnNames:          List of columnNames for metric file.
@@ -201,14 +200,12 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
                       DEFAULT: 0
 
     OUTPUT:
-        mappedData (nibabel.GiftiImage): 
+        mappedData (nibabel.GiftiImage):
             Gifti object- can be saved as a *.func.gii or *.label.gii file
     """
 
-    A = []
-    firstGood = []
-    ind = []
-    Indices = list()
+    Vols = []
+    firstGood = None
     depths = np.array(depths)
 
     if excludeThres != 0:
@@ -228,40 +225,32 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
     c2 = pialSurfGiftiImage.darrays[0].data
     faces = whiteSurfGiftiImage.darrays[1].data
 
-    numVerts = len(c1[1])
+    numVerts = c1.shape[0]
 
-    if ([len(c1[1]),len(c2[1])] != [numVerts,numVerts]):
-        sys.exit('Error: Vertex matrices should be of shape: vertices x 3.')
-
-    if (len(c1[0]) != len(c2[0])):
+    if c2.shape[0] != numVerts:
         sys.exit('Error: White and pial surfaces should have same number of vertices.')
 
     for i in range(len(volumes)):
-        fileName = (V[i]).strip()
         try:
-            a = nibabel.load(fileName)
-            A.append(a)
-            if not firstGood:
-                firstGood = i
+            a = nb.load(volumes[i])
+            Vols.append(a)
+            firstGood = i
         except:
-           print('Warning: {} could not be opened.'.format(fileName))
-           A.append('')
+            print(f'File {volumes[i]} could not be opened')
+            Vols.append(None)
 
-    V = A
-
-    if not firstGood:
+    if firstGood is None:
         sys.exit('Error: None of the images could be opened.')
 
-    if (ignoreZeros == 1):
-        ignoreZeros = np.ones(len(V))*ignoreZeros
-
+    # Get the indices for all the points being sampled
+    indices = np.zeros((numPoints,numVerts,3),dtype=int)
     for i in range(numPoints):
-        c = (1-depths[i])*np.transpose(c1)+depths[i]*np.transpose(c2)
-        ind = coords2linvoxelidxs.coords2linvoxelidxs(c,V[firstGood])
-        Indices.append(ind)
+        c = (1-depths[i])*c1.T+depths[i]*c2.T
+        ijk = coords_to_linvoxelidxs(c,Vols[firstGood])
+        indices[i] = ijk.T
 
-    indices = np.transpose(np.squeeze(np.asarray(Indices)))
-    indices = indices.astype(int)
+# indices = np.transpose(np.squeeze(np.asarray(indices)))
+    # indices = indices.astype(int)
 
 
     # Case: excludeThres > 0
@@ -334,19 +323,15 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
 #        nb.save(np.reshape(exclude,np.array(Vexcl.shape)),'excl.nii')
 
     # Case: excludeThres = 0
-    data = np.zeros(indices.shape)*np.nan
-    M.data = np.empty([len(data),len(V)])
-    indices = indices.reshape(-1)
-    i = np.asarray(np.where(np.isfinite(indices))[0])
+    data = np.zeros(numPoints,numVerts)
 
-    for v in range(len(V)):
-        if not V[v]:
-            M.data[:,v] = np.nan([len(c1),1])
+    for vol in Vols:
+        if vol is None:
+            pass
         else:
-            X = V[v].get_data()
+            X = vols.get_data()
             if (ignoreZeros>0):
                 X[X==0] = np.nan
-            X = X.reshape(-1)
             data = np.reshape((X[indices[i]]),(-1,6))
             if stats == 'nanmean':
                 M.data[:,v] = np.nanmean(data,axis=1)

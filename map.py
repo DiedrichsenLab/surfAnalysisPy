@@ -90,7 +90,7 @@ def subs_to_inds(siz,pos):
 
     return ids
 
-def coords_to_linvoxelidxs(coords,volDef):
+def coords_to_voxelidxs(coords,volDef):
     """
     Maps coordinates to linear voxel indices
 
@@ -105,14 +105,10 @@ def coords_to_linvoxelidxs(coords,volDef):
             Linear voxel indices
     """
     mat = np.array(volDef.affine)
-    dim = np.array(volDef.shape)
 
     # Check that coordinate transformation matrix is 4x4
     if (mat.shape != (4,4)):
         sys.exit('Error: Matrix should be 4x4')
-    # Check that volume dimension is 1x3
-    if (dim.shape != (3,)):
-        sys.exit('Error: Dimensions should be a 1x3 vector')
 
     rs = coords.shape
     if (rs[0] != 3):
@@ -133,7 +129,9 @@ def coords_to_linvoxelidxs(coords,volDef):
 
     ijk = np.linalg.solve(mat,coords)
     ijk = np.rint(ijk)[0:3,:]
-
+    # Now set the indices out of range to -1
+    for i in range(3):
+        ijk[i,ijk[i,:]>=volDef.shape[i]]=-1
     # allinidxs = subs_to_inds(dim,np.transpose(ijk))
     # linidxs = allinidxs
 
@@ -142,9 +140,9 @@ def coords_to_linvoxelidxs(coords,volDef):
     return ijk
 
 
-def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
-            excludeThres=0,columnNames=[],depths=[0,0.2,0.4,0.6,0.8,1.0],
-            interp=0,anatomicalStruct='CortexLeft',stats='nanmean',faces=[]):
+def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes,
+            ignoreZeros=0, excludeThres=0, depths=[0,0.2,0.4,0.6,0.8,1.0],
+            stats=lambda X:np.nanmean(X,axis=0)):
     """
     Maps volume data onto a surface, defined by white and pial surface.
     Function enables mapping of volume-based data onto the vertices of a
@@ -178,30 +176,29 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
         volumes (list):
             List of filenames, or nibable.NiftiImage  to be mapped
     OPTIONAL:
-        ignoreZeros:          Should zeros be ignored?
-                          DEFAULT: 0 (Set to 1 for F and accuracy.)
-        columnNames:          List of columnNames for metric file.
-                          DEFAULT: empty list
-        depths:               Depths of points along line at which to map (0=white/gray, 1=pial).
-                      DEFAULT: [0.0,0.2,0.4,0.6,0.8,1.0]
-        interp:               Interpolation: 0=nearest neighbour, 1=trilinear
-                      DEFAULT: 0 (Currently only nearest neighbor is supported.)
-        stats:                Statistics to be evaluated.
-                      @(x)nanmean(x,2) default and used for activation data
-                      @(x)mode(x,2) used when discrete labels are sampled. The most frequent label is assigned.
-                      DEFAULT: 'nanmean'
-        excludeThres:         Threshold enables the exclusion of voxels that touch the surface
-                       in two distinct places
-                      (e.g., voxels that lie in the middle of a sulcus). If a voxel projects to two separate place
-                      on the surface, the algorithm excludes it, if the proportion of the bigger cluster
-                      is smaller than the threshold. (i.e. threshold = 0.9 means that the voxel has to
-                      lie at least to 90% on one side of the sulcus).
-                      **** Currently not supported.  excludeThres is automatically reset to 0. ****
-                      DEFAULT: 0
+        ignoreZeros (bool):
+            Should zeros be ignored in mapping? DEFAULT:  False
+        depths (array-like):
+            Depths of points along line at which to map (0=white/gray, 1=pial).
+            DEFAULT: [0.0,0.2,0.4,0.6,0.8,1.0]
+        stats (lambda function):
+            function that calculates the Statistics to be evaluated.
+            lambda X: np.nanmean(X,axis=0) default and used for activation data
+            lambda X: np.mode(X,axis=0) used when discrete labels are sampled.
+            The most frequent label is assigned.
+        excludeThres (float):
+            Threshold enables the exclusion of voxels that touch the surface
+            in two distinct places
+            (e.g., voxels that lie in the middle of a sulcus). If a voxel projects to two separate place
+            on the surface, the algorithm excludes it, if the proportion of the bigger cluster
+            is smaller than the threshold. (i.e. threshold = 0.9 means that the voxel has to
+            lie at least to 90% on one side of the sulcus).
+            **** Currently not supported.  excludeThres is automatically reset to 0. ****
+            DEFAULT: 0
 
     OUTPUT:
-        mappedData (nibabel.GiftiImage):
-            Gifti object- can be saved as a *.func.gii or *.label.gii file
+        mapped_data (numpy.array):
+            A Data array for the mapped data
     """
 
     Vols = []
@@ -211,10 +208,6 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
     if excludeThres != 0:
         print('Warning: excludeThres option currently not supported. Resetting excludeThres to 0.')
         excludeThres = 0
-
-    if interp == 1:
-        print('Warning: trilinear interpolation not supported.  Resetting interp to nearest neighbor.')
-        interp = 0
 
     numPoints = len(depths)
 
@@ -246,7 +239,7 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
     indices = np.zeros((numPoints,numVerts,3),dtype=int)
     for i in range(numPoints):
         c = (1-depths[i])*c1.T+depths[i]*c2.T
-        ijk = coords_to_linvoxelidxs(c,Vols[firstGood])
+        ijk = coords_to_voxelidxs(c,Vols[firstGood])
         indices[i] = ijk.T
 
 # indices = np.transpose(np.squeeze(np.asarray(indices)))
@@ -323,35 +316,50 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
 #        nb.save(np.reshape(exclude,np.array(Vexcl.shape)),'excl.nii')
 
     # Case: excludeThres = 0
-    data = np.zeros(numPoints,numVerts)
-
-    for vol in Vols:
+    data = np.zeros((numPoints,numVerts))
+    mapped_data = np.zeros((numVerts,len(Vols)))
+    for v,vol in enumerate(Vols):
         if vol is None:
             pass
         else:
-            X = vols.get_data()
+            X = vol.get_data()
             if (ignoreZeros>0):
                 X[X==0] = np.nan
-            data = np.reshape((X[indices[i]]),(-1,6))
-            if stats == 'nanmean':
-                M.data[:,v] = np.nanmean(data,axis=1)
-            elif stats == 'mode':
-                M.data[:,v] = np.mode(data,axis=1)
+            for p in range(numPoints):
+                data[p,:] = X[indices[p,:,0],indices[p,:,1],indices[p,:,2]]
+                outside = (indices[p,:,:]<0).any(axis=1) # These are vertices outside the volume
+                data[p,outside] = np.nan
+                mapped_data[:,v] = stats(data)
 
-    # Determine the column names based on the filenames of the volumes
-    if not columnNames:
-        for i in range(len(V)):
-            if not V[i]:
-                columnNames[i] = 'void'
-            else:
-                fName = V[i].get_filename()
-                cName = os.path.splitext(os.path.split(fName)[1])[0]
-                columnNames.append(cName)
+    return mapped_data
 
-    # Build a functional GIFTI structure
-    C = nibabel.gifti.GiftiMetaData.from_dict({'AnatomicalStructurePrimary': anatomicalStruct,
-                                          'encoding': 'XML_BASE64_GZIP'})
-    E = nibabel.gifti.gifti.GiftiLabel()
+def make_func_gifti(data,anatomical_struct='CortexLeft',column_names=[]):
+    """
+    Generates a function GiftiImage from a numpy array
+       @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
+
+    INPUTS:
+        data (np.array):
+             numVert x numCol data
+        anatomical_struct (string):
+            Anatomical Structure for the Meta-data default= 'CortexLeft'
+        column_names (list):
+            List of strings for names for columns
+    OUTPUTS:
+        FuncGifti (functional GiftiImage)
+    """
+    numVerts, numCols = data.shape
+    #
+    # Make columnNames if empty
+    if len(column_names)==0:
+        for i in range(numCols):
+            column_names.append("col_{:02d}".format(i+1))
+
+    C = nb.gifti.GiftiMetaData.from_dict({
+    'AnatomicalStructurePrimary': anatomicalStruct,
+    'encoding': 'XML_BASE64_GZIP'})
+
+    E = nb.gifti.gifti.GiftiLabel()
     E.key = 0
     E.label= '???'
     E.red = 1.0
@@ -360,20 +368,127 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes, ignoreZeros=0,
     E.alpha = 0.0
 
     D = list()
-    for i in range(len(V)):
-        d = nibabel.gifti.GiftiDataArray(
-        data=np.float32(M.data[:,i]),
-        intent='NIFTI_INTENT_NONE',
-        datatype='NIFTI_TYPE_FLOAT32',
-        meta=nibabel.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
+    for i in range(numCols):
+        d = nb.gifti.GiftiDataArray(
+            data=np.float32(data[:, i]),
+            intent='NIFTI_INTENT_NONE',
+            datatype='NIFTI_TYPE_FLOAT32',
+            meta=nb.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
         )
         D.append(d)
 
-    S = nibabel.gifti.GiftiImage(meta=C, darrays=D)
-    S.labeltable.labels.append(E)
-    nibabel.save(S,'vol2surfOut.func.gii')
+    gifti = nb.gifti.GiftiImage(meta=C, darrays=D)
+    gifti.labeltable.labels.append(E)
+
+    return gifti
+
+def make_label_gifti(data,anatomical_struct='CortexLeft',label_names=[],column_names=[],label_RGBA=[]):
+    """
+    Generates a label GiftiImage from a numpy array
+       @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
+
+    INPUTS:
+        data (np.array):
+             numVert x numCol data
+        anatomical_struct (string):
+            Anatomical Structure for the Meta-data default= 'CortexLeft'
+        column_names (list):
+            List of strings for names for columns
+    OUTPUTS:
+        gifti (label GiftiImage)
+
+    """
+    numVerts, numCols = data.shape
+    numLabels = len(np.unique(data))
+
+    # Create naming and coloring if not specified in varargin
+    # Make columnNames if empty
+    if len(column_names) == 0:
+        for i in range(numLabels):
+            column_names.append("col_{:02d}".format(i+1))
+
+    # Determine color scale if empty
+    if len(label_RGBA) == 0:
+        hsv = plt.cm.get_cmap('hsv',numLabels)
+        color = hsv(np.linspace(0,1,numLabels))
+        # Shuffle the order so that colors are more visible
+        color = color[np.random.permutation(numLabels)]
+        label_RGBA = np.zeros([numLabels,4])
+        for i in range(numLabels):
+            label_RGBA[i] = color[i]
+
+    # Create label names
+    if len(label_names) == 0:
+        for i in range(numLabels):
+            label_names.append("label-{:02d}".format(i+1))
+
+    # Create label.gii structure
+    C = nb.gifti.GiftiMetaData.from_dict({
+        'AnatomicalStructurePrimary': anatomical_struct,
+        'encoding': 'XML_BASE64_GZIP'})
+
+    E = nb.gifti.gifti.GiftiLabel()
+    E.key = np.arange(label_names)
+    E.label= label_names
+    E.red = label_RGBA[:,0]
+    E.green = label_RGBA[:,1]
+    E.blue = label_RGBA[:,2]
+    E.alpha = label_RGBA[:,3]
+
+    D = list()
+    for i in range(Q):
+        d = nb.gifti.GiftiDataArray(
+            data=np.float32(data[:, i]),
+            intent='NIFTI_INTENT_LABEL',
+            datatype='NIFTI_TYPE_INT32',
+            meta=nb.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
+        )
+        D.append(d)
+
+    # Make and return the gifti file
+    gifti = nb.gifti.GiftiImage(meta=C, darrays=D)
+    gifti.labeltable.labels.append(E)
+    return gifti
 
 
+def get_gifti_column_names(G):
+    """
+    Created on Mon Mar 25 21:11:31 2019
+
+    Returns the column names from a functional gifti file.
+
+    INPUT:
+    G:				Nibabel gifti object
+
+    OUTPUT:
+    names:			List of column names from gifti object attribute data arrays
+
+    @author: jdiedrichsen (Python conversion: switt)
+    """
+    N = len(G.darrays)
+    names = []
+    for n in range(N):
+        for i in range(len(G.darrays[n].meta.data)):
+            if 'Name' in G.darrays[n].meta.data[i].name:
+                names.append(G.darrays[n].meta.data[i].value)
+    return names
 
 
+def get_gifti_anatomical_struct(G):
+    """
+    Returns the primary anatomical structure for a gifti object.
 
+    INPUT:
+    G:				Nibabel gifti object
+
+    OUTPUT:
+    anatStruct:		AnatomicalStructurePrimary attribute from gifti object
+
+    @author: jdiedrichsen (Python conversion: switt)
+    """
+    N = len(G._meta.data)
+    anatStruct = []
+    for i in range(N):
+        if 'AnatomicalStructurePrimary' in G._meta.data[i].name:
+            anatStruct.append(G._meta.data[i].value)
+    return anatStruct

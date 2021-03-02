@@ -10,8 +10,7 @@ import numpy as np
 import os
 import sys
 import nibabel as nb
-from scipy import sparse
-#from casadi import sparsify
+import warnings
 
 def affine_transform(x1,x2,x3,M):
     """
@@ -32,63 +31,6 @@ def affine_transform(x1,x2,x3,M):
     y2 = np.multiply(M[1,0],x1) + np.multiply(M[1,1],x2) + np.multiply(M[1,2],x3) + M[1,3]
     y3 = np.multiply(M[2,0],x1) + np.multiply(M[2,1],x2) + np.multiply(M[2,2],x3) + M[2,3]
     return (y1,y2,y3)
-
-def subs_to_inds(siz,pos):
-    """
-    Linear indices from multiple subscripts; a generalization of sub2ind
-    Function returns the linear indices for each row of subscripts in  pos based on a matrix with dimensions siz.
-    If siz=[s1, ..., sn] refers to a matrix of size s1 x ... x sN, and pos is
-    an M x N where each row contains the subindices referring to a single
-    element, then ids is a M x 1 vector with linear indices.
-    For indices in pos that are out of bounds, the corresponding element in ids
-    is NaN. If pos is of type int32, however, the corresponding element is set
-    to zero.
-
-    INPUT:
-        siz (1x3 array like):
-            Dimension of image
-        pos (np-array):
-            Matrix of subindices referring to a single element
-
-    OUTPUT:
-        ids:
-            Vector of linear indices
-    """
-
-    dimCount = np.shape(siz)[0]
-    [posCount,dimCount2] = np.shape(pos)
-
-    if (dimCount != dimCount2):
-        sys.exit('Error: Number of dimensions do not match.')
-
-    # Make sure pos and siz have same data type class
-    posClass = pos.dtype
-    sizClass = siz.dtype
-    if (posClass != sizClass):
-        siz = siz.astype(posClass)
-
-    # Multiplication factors for the different positions
-    mply = np.zeros([1,dimCount],dtype=clpos)
-    mply[0,0] = 1
-    for k in range(dimCount-1):
-        mply[0][k+1] = mply[0][k]*siz[k]
-
-    alot = 1e6
-    if posCount>alot:
-        ids = np.zeros([posCount,1],dtype=clpos)
-        for k in range(1,posCount,alot):
-            idxs = range(k,np.min([k+alot-1,posCount]))
-            ids[idxs] = subs2inds(siz,pos[idxs,:])
-        return
-
-    ids = np.sum(np.multiply((pos-1),np.tile(mply,(posCount,1))),axis=1)+1
-
-    beyond = np.tile(siz,(posCount,1))-pos
-    outOfBounds = np.sum(np.logical_or(pos<1,beyond<0),axis=1)>0
-    if len(np.where(outOfBounds)[0]):
-        ids[np.where(outOfBounds)]=np.nan
-
-    return ids
 
 def coords_to_voxelidxs(coords,volDef):
     """
@@ -132,17 +74,11 @@ def coords_to_voxelidxs(coords,volDef):
     # Now set the indices out of range to -1
     for i in range(3):
         ijk[i,ijk[i,:]>=volDef.shape[i]]=-1
-    # allinidxs = subs_to_inds(dim,np.transpose(ijk))
-    # linidxs = allinidxs
-
-    # linidxsrs = np.transpose(np.reshape(linidxs,[nCoordsPerNode,nVerts]))
-
     return ijk
 
-
-def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes,
+def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
             ignoreZeros=0, excludeThres=0, depths=[0,0.2,0.4,0.6,0.8,1.0],
-            stats=lambda X:np.nanmean(X,axis=0)):
+            stats='nanmean'):
     """
     Maps volume data onto a surface, defined by white and pial surface.
     Function enables mapping of volume-based data onto the vertices of a
@@ -169,23 +105,22 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes,
     @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
 
     INPUTS:
+        volumes (list):
+            List of filenames, or nibable.NiftiImage  to be mapped
         whiteSurfGifti (string or nibabel.GiftiImage):
             White surface, filename or loaded gifti object
         pialSurfGifti (string or nibabel.GiftiImage):
             Pial surface, filename or loaded gifti object
-        volumes (list):
-            List of filenames, or nibable.NiftiImage  to be mapped
     OPTIONAL:
         ignoreZeros (bool):
             Should zeros be ignored in mapping? DEFAULT:  False
         depths (array-like):
             Depths of points along line at which to map (0=white/gray, 1=pial).
             DEFAULT: [0.0,0.2,0.4,0.6,0.8,1.0]
-        stats (lambda function):
+        stats (str or lambda function):
             function that calculates the Statistics to be evaluated.
             lambda X: np.nanmean(X,axis=0) default and used for activation data
-            lambda X: np.mode(X,axis=0) used when discrete labels are sampled.
-            The most frequent label is assigned.
+            lambda X: scipy.stats.mode(X,axis=0) used when discrete labels are sampled. The most frequent label is assigned.
         excludeThres (float):
             Threshold enables the exclusion of voxels that touch the surface
             in two distinct places
@@ -315,7 +250,7 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes,
 #        Vexcl.set_filename = 'excl.nii'
 #        nb.save(np.reshape(exclude,np.array(Vexcl.shape)),'excl.nii')
 
-    # Case: excludeThres = 0
+   # Read the data and map it
     data = np.zeros((numPoints,numVerts))
     mapped_data = np.zeros((numVerts,len(Vols)))
     for v,vol in enumerate(Vols):
@@ -329,6 +264,15 @@ def vol_to_surf(whiteSurfGifti, pialSurfGifti, volumes,
                 data[p,:] = X[indices[p,:,0],indices[p,:,1],indices[p,:,2]]
                 outside = (indices[p,:,:]<0).any(axis=1) # These are vertices outside the volume
                 data[p,outside] = np.nan
+
+            # Determine the right statistics - if function - call it
+            if stats=='nanmean':
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    mapped_data[:,v] = np.nanmean(data,axis=0)
+            elif stats=='mode':
+                mapped_data[:,v],_ = ss.mode(data,axis=0)
+            elif callable(stats):
                 mapped_data[:,v] = stats(data)
 
     return mapped_data

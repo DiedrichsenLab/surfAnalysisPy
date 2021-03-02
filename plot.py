@@ -1,170 +1,208 @@
-from nilearn import plotting
-import nibabel as nib
-from nilearn import surface
-from nilearn import datasets
-
+import numpy as np
 import os
-from pathlib import Path
-from scipy.stats import norm
+import sys
+import nibabel as nb
 import matplotlib.pyplot as plt
+import scipy.stats as ss
+import matplotlib
+from matplotlib.patches import Polygon
+from matplotlib.collections import PatchCollection
+from matplotlib.colors import ListedColormap
+import warnings
 
-import glob
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+_surf_dir = os.path.join(_base_dir, 'standard_mesh')
 
-class Defaults: 
-    BASE_DIR = os.path.join(Path(__file__).absolute().parent.parent.parent, "data")
-    # BASE_DIR = "/global/scratch/maedbhking/projects/cerebellum_language/data"
-    GLM_DIR = os.path.join(BASE_DIR, "glm_firstlevel")
-    SUIT_FUNCTIONAL_DIR = os.path.join(BASE_DIR, "suit", "functional")
-    SUIT_ANATOMICAL_DIR = os.path.join(BASE_DIR, "suit", "anatomical")
+def plotmap(data, surf, underlay = None,
+        undermap = 'Greys', underscale = None, overlay_type = 'func', threshold = None,
+        cmap = None, cscale = None, borders = None, alpha = 1.0,
+        outputfile = None, render='matplotlib'):
+    """
+    Visualised cerebellar cortical acitivty on a flatmap in a matlab window
+    INPUT:
+        data (np.array, giftiImage, or name of gifti file)
+            Data to be plotted 
+        surf (str or giftiImage)
+            Flat surface file for flatmap
+        underlay (str, giftiImage, or np-array)
+            Full filepath of the file determining underlay coloring (default: SUIT.shape.gii in SUIT pkg)
+        undermap (str)
+            Matplotlib colormap used for underlay (default: gray)
+        underscale (array-like)
+            Colorscale [min, max] for the underlay (default: [-1, 0.5])
+        overlay_type (str)
+            'func': functional activation 'label': categories 'rgb': RGB values (default: func)
+        threshold (scalar or array-like)
+            Threshold for functional overlay. If one value is given, it is used as a positive threshold.
+            If two values are given, an positive and negative threshold is used.
+        cmap (str)
+            Matplotlib colormap used for overlay (defaults to 'jet' if none given)
+        borders (str)
+            Full filepath of the borders txt file (default: borders.txt in SUIT pkg)
+        cscale (int array)
+            Colorscale [min, max] for the overlay, valid input values from -1 to 1 (default: [overlay.max, overlay.min])
+        alpha (float)
+            Opacity of the overlay (default: 1)
+        outputfile (str)
+            Name / path to file to save figure (default None)
+        render (str)
+            Renderer for graphic display 'matplot' / 'opengl'. Dafault is matplotlib
+    OUTPUT:
+        ax (matplotlib.axis)
+            If render is matplotlib, the function returns the axis
+    """
 
-    # subjs
-    subjs = ['sub-01', 'sub-02', 'sub-03']
+    # load topology
+    flatsurf = nb.load(surf)
+    vertices = flatsurf.darrays[0].data
+    faces    = flatsurf.darrays[1].data
 
-    task_labels = ['covertnoun', 'covertverb', 'overtverb', 'covertadjective']
+    # Underlay 
+    if underlay is not None:
+        # Load underlay and assign color
+        if type(underlay) is not np.ndarray:
+            underlay = nb.load(underlay).darrays[0].data
+        underlay_color = _map_color(faces, underlay, underscale, undermap)
+    else: 
+        # set the underlay to white
+        underlay_color = np.ones((faces.shape[0],4)) 
+
+    # Load the overlay if it's a string
+    if type(data) is str:
+        data = nb.load(data)
+
+    # If it is a giftiImage, figure out colormap
+    if type(data) is nb.gifti.gifti.GiftiImage:
+        if overlay_type == 'label':
+            cmap = get_gifti_colortable(data)
+            data = data.darrays[0].data
+
+    # If 2d-array, take the first column only
+    if data.ndim>1:
+        data = data[:,0]
     
-class VisualizeCortex:
+    # depending on data type - type cast into int
+    if overlay_type=='label':
+        i = np.isnan(data)
+        data = data.astype(int)
+        data[i]=0
 
-    def __init__(self):
-        self.contrast_type = "effect_size" # "z_score" and "effect_size" are the options
-        self.z_map_threshold = 2 # 0.01
-        self.surface_threshold = 1.0
-        self.vmax = 30
-        self.interactive_threshold = '10%'
-        self.display_mode = 'ortho' # or ortho, l
-        self.plot_abs = False
-        self.glm = "glm2"
-        self.interactive = False
-        self.hemi = ["right", "left"]
+    # map the overlay to the faces
+    overlay_color  = _map_color(faces, data, cscale, cmap, threshold)
 
-    def plot_glass_brain(self):
-        plotting.plot_glass_brain(self.img, colorbar=True, 
-                                threshold=norm.isf(self.z_map_threshold),
-                                title=self.title, plot_abs=self.plot_abs, 
-                                display_mode=self.display_mode)
-        plt.show()
+    # Combine underlay and overlay: For Nan overlay, let underlay shine through
+    face_color = underlay_color * (1-alpha) + overlay_color * alpha
+    i = np.isnan(face_color.sum(axis=1))
+    face_color[i,:]=underlay_color[i,:]
+    face_color[i,3]=1.0
 
-    def plot_surface(self): 
-        plotting.plot_surf_stat_map(self.inflated, self.texture,
-                                    hemi=self.hem, threshold=self.surface_threshold,
-                                    title=self.title, colorbar=True, 
-                                    bg_map=self.bg_map, vmax=self.vmax)
-        
-        plt.show()
+    # If present, get the borders
+    if borders is not None:
+        borders = np.genfromtxt(borders, delimiter=',')
 
-    def plot_interactive_surface(self):
-        view = plotting.view_surf(self.inflated, self.texture, 
-                                threshold=self.interactive_threshold, 
-                                bg_map=self.bg_map)
+    # Render with Matplotlib
+    ax = _render_matplotlib(vertices, faces, face_color, borders)
+    return ax
 
-        view.open_in_browser()
+def _map_color(faces, data, scale, cmap=None, threshold = None):
+    """
+    Maps data from vertices to faces, scales the values, and
+    then looks up the RGB values in the color map
 
-    def _get_surfaces(self):
-        if self.hem=="right":
-            inflated = self.fsaverage.infl_right
-            bg_map = self.fsaverage.sulc_right
-            texture = surface.vol_to_surf(self.img, self.fsaverage.pial_right)
-        elif self.hem=="left":
-            inflated = self.fsaverage.infl_left
-            bg_map = self.fsaverage.sulc_left
-            texture = surface.vol_to_surf(self.img, self.fsaverage.pial_left)
-        else:
-            print('hemisphere not provided')
+    Input:
+        data (1d-np-array)
+            Numpy Array of values to scale. If integer, if it is not scaled
+        scale (array like)
+            (min,max) of the scaling of the data
+        cmap (str, or matplotlib.colors.Colormap)
+            The Matplotlib colormap
+        threshold (array like)
+            (lower, upper) threshold for data display -
+             only data x<lower and x>upper will be plotted
+            if one value is given (-inf) is assumed for the lower
+    """
 
-        return inflated, bg_map, texture
-    
-    def visualize_subj_glass_brain(self):
+    # When continuous data, scale and threshold
+    if data.dtype.kind == 'f':
+        # if threshold is given, threshold the data
+        if threshold is not None:
+            if np.isscalar(threshold):
+                threshold=np.array([-np.inf,threshold])
+            data[np.logical_and(data>threshold[0], data<threshold[1])]=np.nan
 
-        # loop over subjects
-        for subj in Defaults.subjs:
+        # if scale not given, find it
+        if scale is None:
+            scale = np.array([np.nanmin(data), np.nanmax(data)])
 
-            GLM_SUBJ_DIR = os.path.join(Defaults.GLM_DIR, self.glm, subj)
-            os.chdir(GLM_SUBJ_DIR)
-            fpaths = glob.glob(f'*{self.contrast_type}-{self.glm}.nii')
-            
-            for fpath in fpaths: 
-                self.img = nib.load(os.path.join(GLM_SUBJ_DIR, fpath))
-                self.title = f'{Path(fpath).stem}-(unc p<{self.z_map_threshold})'
-                self.plot_glass_brain()
+        # Scale the data
+        data = ((data - scale[0]) / (scale[1] - scale[0]))
 
-    def visualize_group_glass_brain(self):
+    # Map the values from vertices to faces and integrate
+    numFaces = faces.shape[0]
+    face_value = np.zeros((3,numFaces),dtype = data.dtype)
+    for i in range(3):
+        face_value[i,:] = data[faces[:,i]]
 
-        GLM_GROUP_DIR = os.path.join(Defaults.GLM_DIR, self.glm, "group")
-        os.chdir(GLM_GROUP_DIR)
-        fpaths = glob.glob(f'*{self.contrast_type}-{self.glm}.nii')
+    if data.dtype.kind == 'i':
+        face_value,_ = ss.mode(face_value,axis=0)
+        face_value = face_value.reshape((numFaces,))
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            face_value = np.nanmean(face_value, axis=0)
 
-        for fpath in fpaths:
-            # define contrast names
-            self.img = nib.load(os.path.join(GLM_GROUP_DIR, fpath))
-            self.title = f'{Path(fpath).stem}-(unc p<{self.z_map_threshold})'
-            self.plot_glass_brain()
+    # Get the color map
+    if type(cmap) is str:
+        cmap = plt.get_cmap(cmap)
+    elif type(cmap) is np.ndarray:
+        cmap = ListedColormap(cmap)
+    elif cmap is None:
+        cmap = plt.get_cmap('jet')
 
-    def visualize_group_surface(self):
-        self.fsaverage = datasets.fetch_surf_fsaverage()
+    # Map the color
+    color_data = cmap(face_value)
 
-        GLM_GROUP_DIR = os.path.join(Defaults.GLM_DIR, self.glm, "group")
-        os.chdir(GLM_GROUP_DIR)
-        fpaths = glob.glob(f'*{self.contrast_type}-{self.glm}.nii')
+    # Set missing data 0 for int or NaN for float to NaN
+    if data.dtype.kind == 'f':
+        color_data[np.isnan(face_value),:]=np.nan
+    elif data.dtype.kind == 'i':
+        color_data[face_value==0,:]=np.nan
+    return color_data
 
-        for fpath in fpaths:
-            self.img = nib.load(os.path.join(GLM_GROUP_DIR, fpath))
+def _render_matplotlib(vertices,faces,face_color, borders):
+    """
+    Render the data in matplotlib: This is segmented to allow for openGL renderer
 
-            # loop over hemispheres and visualize
-            for self.hem in self.hemi:
+    Input:
+        vertices (np.ndarray)
+            Array of vertices
+        faces (nd.array)
+            Array of Faces
+        face_color (nd.array)
+            RGBA array of color and alpha of all vertices
+    """
+    patches = []
+    for i in range(faces.shape[0]):
+        polygon = Polygon(vertices[faces[i],0:2], True)
+        patches.append(polygon)
+    p = PatchCollection(patches)
+    p.set_facecolor(face_color)
+    p.set_linewidth(0.0)
 
-                # set plot title
-                self.title = f'{Path(fpath).stem}-{self.hem}'
+    # Get the current axis and plot it
+    ax = plt.gca()
+    ax.add_collection(p)
+    xrang = [np.nanmin(vertices[:,0]),np.nanmax(vertices[:,0])]
+    yrang = [np.nanmin(vertices[:,1]),np.nanmax(vertices[:,1])]
 
-                # return surfaces and texture
-                self.inflated, self.bg_map, self.texture = self._get_surfaces()
+    ax.set_xlim(xrang[0],xrang[1])
+    ax.set_ylim(yrang[0],yrang[1])
+    ax.axis('equal')
+    ax.axis('off')
 
-                # plot interactive or static surface(s)
-                if self.interactive:  
-                    self.plot_interactive_surface()
-                else:
-                    self.plot_surface()
-
-        return self.fsaverage
-
-class VisualizeCerebellum:
-
-    def __init__(self):
-        self.contrast_type = "effect_size"
-        self.glm = "glm2" 
-        self.surface_threshold = 1
-        self.vmax = 10
-
-    def plot_surface(self):
-        view = plotting.view_surf(surf_mesh=self.surf_mesh, 
-                                surf_map=self.surf_map, 
-                                colorbar=True,
-                                threshold=self.surface_threshold,
-                                vmax=self.vmax,
-                                title=self.title) 
-        # view.resize(500,500)
-
-        view.open_in_browser()
-   
-    def visualize_group_surface(self):
-
-        # get functional group dir
-        SUIT_FUNCTIONAL_GROUP_DIR = os.path.join(Defaults.SUIT_FUNCTIONAL_DIR, self.glm, "group")
-
-        os.chdir(SUIT_FUNCTIONAL_GROUP_DIR)
-
-        # get all contrast images in gifti format
-        fpaths = glob.glob(f'*{self.contrast_type}-{self.glm}.gii')
-
-        # get surface mesh for SUIT
-        self.surf_mesh = os.path.join(Defaults.SUIT_ANATOMICAL_DIR, "FLAT.surf.gii")
-
-        # loop over all gifti files
-        for fpath in fpaths:
-
-            self.surf_map = surface.load_surf_data(fpath).astype(int)
-            self.title = Path(fpath).stem
-
-            self.plot_surface() 
-
-# example code to visualize group contrast(s) on flat map
-vis = VisualizeCerebellum()
-vis.visualize_group_surface()
+    if borders is not None:
+        ax.plot(borders[:,0],borders[:,1],color='k',
+                marker='.', linestyle=None,
+                markersize=2,linewidth=0)
+    plt.show()
+    return ax

@@ -76,6 +76,8 @@ def plotmap(data, surf, underlay = None,
         if overlay_type == 'label':
             cmap = get_gifti_colortable(data)
             data = data.darrays[0].data
+        else:
+            data = data.darrays[0].data
 
     # If 2d-array, take the first column only
     if data.ndim>1:

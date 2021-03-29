@@ -206,5 +206,4 @@ def _render_matplotlib(vertices,faces,face_color, borders):
         ax.plot(borders[:,0],borders[:,1],color='k',
                 marker='.', linestyle=None,
                 markersize=2,linewidth=0)
-    plt.show()
     return ax

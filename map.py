@@ -49,21 +49,32 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
     https://wiki.humanconnectome.org/download/attachments/63078513/Resampling-FreeSurfer-HCP_5_8.pdf
 
     INPUT: 
-        subjName: subject name
-        subjDir: freesurfer's SUBJECT_DIR (or location of freesurfer output)
-        outDir: Location to where new resampled files will be written (outDir/subjName)
+        subjName (string): 
+            Subject name 
+        subjDir (string): 
+            Path to freesurfer's SUBJECT_DIR (or location of freesurfer output)
+        outDir (string): 
+            Path to where new resampled files will be written (outDir/subjName)
     
-    VARARGIN: 
-        'hemisphere'        : left / right or both hemispheres 
-                                Default = [0,1]
-        'alignSurf':        : Shift the surface to correct for freesurfer convention?
-                               Default = [1,1,1] 
-        'surfFiles'         : Surface files to be resampled 
-                                Default = [".white",".pial",".inflated"]
-        'curvFiles'         : Curvature files to be resampled 
-                                Default = [".curv",".sulc",".area"]
-        'resolution'        : Resolution can be either set to '164k' or '32k'.
-                                Default =  "32k"
+    OPTIONAL: 
+        hemisphere (array): 
+            Resample left, right, or both hemispheres? (0=left, 1=right) 
+            DEFAULT = [0,1]
+        alignSurf (array):
+            Shift the surface to correct for freesurfer convention? 
+            DEFAULT = [1,1,1] 
+        surfFiles (list): 
+            Surface files to be resampled. 
+            DEFAULT = [".white",".pial",".inflated"]
+        curvFiles (list): 
+            Curvature files to be resampled. 
+            DEFAULT = [".curv",".sulc",".area"]
+        resolution (string): 
+            Resolution can be either set to '164k' or '32k'. 
+            DEFAULT =  "32k"
+        
+    OUTPUT:
+        Resampled surfaces (gifti files)
     """
     
     BASE_DIR = pathlib.Path('surfAnalysisPy').resolve()

@@ -82,7 +82,6 @@ def _transform_coordinates(
 
     Freesurfer uses vertex coordinates in respect to the center of the 256x256x256 image, 
     independent of the real zero point in the original image.
-    vox2surf_mat: Transform of voxels in 256x256 image to surface vertices
     surf2space_mat: Transform of voxel to subject space
 
     Args: 
@@ -90,7 +89,7 @@ def _transform_coordinates(
         subject_dir (str): path to freesurfer's SUBJECT_DIR
 
     Returns: 
-        vox2surf_mat (np array); surf2space_mat (np array)
+        surf2space_mat (np array)
     """
     anat_fpath = os.path.join(subject_dir, subj_id, "mri", "brain.mgz")
     vox2rastkr_process = subprocess.run(["mri_info", anat_fpath, "--vox2ras-tkr"],\
@@ -114,7 +113,7 @@ def freesurfer_reconall(
     fpath, 
     subject_dir=None
     ):
-    """Run freesurfer routine on `subj_id` and `anatomical`
+    """Run freesurfer routine on `subj_id` and `fpath`
 
     Calls freesurfer `recon-all`, which performs, all of the freeSurfer cortical reconstruction process
 

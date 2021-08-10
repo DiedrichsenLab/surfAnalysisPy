@@ -8,6 +8,7 @@ import matplotlib
 from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import ListedColormap
+from mpl_toolkits.mplot3d import Axes3D
 import warnings
 
 _base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -103,7 +104,8 @@ def plotmap(data, surf, underlay = None,
         borders = np.genfromtxt(borders, delimiter=',')
 
     # Render with Matplotlib
-    ax = _render_matplotlib(vertices, faces, face_color, borders)
+    #ax = _render_matplotlib(vertices, faces, face_color, borders)
+    ax = _render_trisurf(vertices, faces, face_color, borders)
     return ax
 
 def _map_color(faces, data, scale, cmap=None, threshold = None):
@@ -201,6 +203,44 @@ def _render_matplotlib(vertices,faces,face_color, borders):
     ax.set_ylim(yrang[0],yrang[1])
     ax.axis('equal')
     ax.axis('off')
+
+    if borders is not None:
+        ax.plot(borders[:,0],borders[:,1],color='k',
+                marker='.', linestyle=None,
+                markersize=2,linewidth=0)
+    return ax
+
+def _render_trisurf(vertices,faces,face_color,borders):
+    """
+    Render the data in matplotlib using plot_trisurf: This is segmented to allow for openGL renderer
+
+    Input:
+        vertices (np.ndarray)
+            Array of vertices
+        faces (nd.array)
+            Array of Faces
+        face_color (nd.array)
+            RGBA array of color and alpha of all vertices
+    """
+
+    verticesTemp = np.zeros_like(vertices)
+    verticesTemp[:,1] = vertices[:,0]
+    verticesTemp[:,2] = vertices[:,1]
+    verticesTemp[:,0] = 0
+    vertices = verticesTemp
+
+    # Get the current axis and plot it
+    #ax = plt.gca(projection='3d')
+    ax = plt.gca()
+    p3dcollec = ax.plot_trisurf(vertices[:,0], vertices[:,1], vertices[:,2], triangles=faces, linewidth=0.0, antialiased=False, color='white')
+    ax.view_init(elev=0,azim=0)
+    p3dcollec.set_facecolor(face_color)
+    xrang = [np.nanmin(vertices[:,1]),np.nanmax(vertices[:,1])]
+    yrang = [np.nanmin(vertices[:,2]),np.nanmax(vertices[:,2])]
+
+    ax.set_xlim(xrang[0],xrang[1])
+    ax.set_ylim(yrang[0],yrang[1])
+    ax.set_axis_off()
 
     if borders is not None:
         ax.plot(borders[:,0],borders[:,1],color='k',

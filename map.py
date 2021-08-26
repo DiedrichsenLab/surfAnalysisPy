@@ -464,7 +464,7 @@ def make_func_gifti(data,anatomical_struct='CortexLeft',column_names=[]):
             column_names.append("col_{:02d}".format(i+1))
 
     C = nb.gifti.GiftiMetaData.from_dict({
-    'AnatomicalStructurePrimary': anatomicalStruct,
+    'AnatomicalStructurePrimary': anatomical_struct,
     'encoding': 'XML_BASE64_GZIP'})
 
     E = nb.gifti.gifti.GiftiLabel()
@@ -481,7 +481,7 @@ def make_func_gifti(data,anatomical_struct='CortexLeft',column_names=[]):
             data=np.float32(data[:, i]),
             intent='NIFTI_INTENT_NONE',
             datatype='NIFTI_TYPE_FLOAT32',
-            meta=nb.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
+            meta=nb.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
         )
         D.append(d)
 

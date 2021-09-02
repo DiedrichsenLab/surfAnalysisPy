@@ -53,7 +53,12 @@ def plotmap(data, surf, underlay = None,
     """
 
     # load topology
-    flatsurf = nb.load(surf)
+    if type(surf) is nb.gifti.gifti.GiftiImage:
+        flatsurf = surf
+    elif type(surf) is str:
+        flatsurf = nb.load(surf)
+    else: 
+        raise NameError('surf needs to be a file name or a GiftiImage')
     vertices = flatsurf.darrays[0].data
     faces    = flatsurf.darrays[1].data
 

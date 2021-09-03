@@ -12,7 +12,7 @@ def freesurfer_reconall(
     fpath, 
     subject_dir=None
     ):
-    """Run freesurfer routine on `subj_id` and `anatomical`
+    """Run freesurfer routine on `subj_id`
 
     Calls freesurfer `recon-all`, which performs, all of the freeSurfer cortical reconstruction process
 

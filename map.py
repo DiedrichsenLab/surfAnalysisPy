@@ -500,8 +500,12 @@ def make_label_gifti(data,anatomical_struct='CortexLeft',label_names=[],column_n
              numVert x numCol data
         anatomical_struct (string):
             Anatomical Structure for the Meta-data default= 'CortexLeft'
+        label_names (list):
+            List of label names 
         column_names (list):
             List of strings for names for columns
+        label_RGBA (np.array):
+            numLabels x 4 np-array (each element is 0-1)
     OUTPUTS:
         gifti (label GiftiImage)
 
@@ -535,29 +539,33 @@ def make_label_gifti(data,anatomical_struct='CortexLeft',label_names=[],column_n
         'AnatomicalStructurePrimary': anatomical_struct,
         'encoding': 'XML_BASE64_GZIP'})
 
-    E = nb.gifti.gifti.GiftiLabel()
-    E.key = np.arange(label_names)
-    E.label= label_names
-    E.red = label_RGBA[:,0]
-    E.green = label_RGBA[:,1]
-    E.blue = label_RGBA[:,2]
-    E.alpha = label_RGBA[:,3]
+    num_labels = np.arange(numLabels)
+    E_all = []
+    for (label, rgba, name) in zip(num_labels, label_RGBA, label_names):
+        E = nb.gifti.gifti.GiftiLabel()
+        E.key = label 
+        E.label= name
+        E.red = rgba[0]
+        E.green = rgba[1]
+        E.blue = rgba[2]
+        E.alpha = rgba[3]
+        E.rgba = rgba[:]
+        E_all.append(E)
 
     D = list()
-    for i in range(Q):
+    for i in range(numCols):
         d = nb.gifti.GiftiDataArray(
             data=np.float32(data[:, i]),
             intent='NIFTI_INTENT_LABEL',
-            datatype='NIFTI_TYPE_INT32',
-            meta=nb.gifti.GiftiMetaData.from_dict({'Name': columnNames[i]})
+            datatype='NIFTI_TYPE_UINT8',
+            meta=nb.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
         )
         D.append(d)
 
     # Make and return the gifti file
     gifti = nb.gifti.GiftiImage(meta=C, darrays=D)
-    gifti.labeltable.labels.append(E)
-    return gifti
-
+    gifti.labeltable.labels.extend(E_all)
+    return gifti 
 
 def get_gifti_column_names(G):
     """

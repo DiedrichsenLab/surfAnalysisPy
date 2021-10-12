@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar 22 09:15:59 2019
-
-@author: switt, jdiedrichsen
 """
 
 import numpy as np
@@ -12,8 +9,19 @@ import sys
 import re
 import pathlib
 import subprocess
-import nibabel as nb
+import matplotlib.pyplot as plt
+import scipy.stats as ss
+from matplotlib.patches import Polygon
+from matplotlib.collections import PatchCollection
+from matplotlib.colors import ListedColormap
+import nibabel as nib
+import matplotlib as mpl
+import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
 import warnings
+
+_base_dir = os.path.dirname(os.path.abspath(__file__))
+_surf_dir = os.path.join(_base_dir, 'standard_mesh')
 
 def affine_transform(x1,x2,x3,M):
     """
@@ -35,10 +43,10 @@ def affine_transform(x1,x2,x3,M):
     y3 = np.multiply(M[2,0],x1) + np.multiply(M[2,1],x2) + np.multiply(M[2,2],x3) + M[2,3]
     return (y1,y2,y3)
 
-def reslice_fs_to_wb(subjName,subjDir,outDir,\
-                 smoothing=1,surfFiles=["white","pial","inflated"],\
-                 curvFiles=["curv","sulc","area"],hemisphere=[0,1],\
-                 alignSurf=[1,1,1],resolution="32k"):
+def reslice_fs_to_wb(subj_name, subj_dir, out_dir,\
+                 smoothing=1, surf_files=["white","pial","inflated"],\
+                 curv_files=["curv","sulc","area"], hemisphere=[0,1],\
+                 align_surf=[1,1,1], resolution="32k"):
 
     """
     Resamples a registered subject surface from freesurfer average to the new
@@ -49,24 +57,24 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
     https://wiki.humanconnectome.org/download/attachments/63078513/Resampling-FreeSurfer-HCP_5_8.pdf
 
     INPUT: 
-        subjName (string): 
+        subj_name (string): 
             Subject name 
-        subjDir (string): 
+        subj_dir (string): 
             Path to freesurfer's SUBJECT_DIR (or location of freesurfer output)
-        outDir (string): 
-            Path to where new resampled files will be written (outDir/subjName)
+        out_dir (string): 
+            Path to where new resampled files will be written (out_dir/subj_name)
     
     OPTIONAL: 
         hemisphere (array): 
             Resample left, right, or both hemispheres? (0=left, 1=right) 
             DEFAULT = [0,1]
-        alignSurf (array):
+        align_surf (array):
             Shift the surface to correct for freesurfer convention? 
             DEFAULT = [1,1,1] 
-        surfFiles (list): 
+        surf_files (list): 
             Surface files to be resampled. 
             DEFAULT = [".white",".pial",".inflated"]
-        curvFiles (list): 
+        curv_files (list): 
             Curvature files to be resampled. 
             DEFAULT = [".curv",".sulc",".area"]
         resolution (string): 
@@ -77,13 +85,11 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
         Resampled surfaces (gifti files)
     """
     
-    BASE_DIR = pathlib.Path('surfAnalysisPy').resolve()
-    atlasDir = BASE_DIR.joinpath('standard_mesh')
-    
+    base_dir = pathlib.Path('surfAnalysisPy').resolve()
+    atlas_dir = base_dir.joinpath('standard_mesh')
     
     hemisphere = np.array(hemisphere)
-    alignSurf = np.array(alignSurf)
-    
+    align_surf = np.array(align_surf)
     
     structName = ["left","right"]
     hem = ["lh","rh"]
@@ -92,26 +98,26 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
     currentDirectory = os.getcwd()
     freesurferAverageSurfaceDirectory = os.path.join(os.getenv("FREESURFER_HOME"),"average","surf")
     
-    if not subjDir:
-        subjDir = os.getenv("SUBJECTS_DIR")
+    if not subj_dir:
+        subj_dir = os.getenv("SUBJECTS_DIR")
     
     # Read in freesurfer version
-    freesurferVersionFile = os.path.join(os.getenv("FREESURFER_HOME"),"build-stamp.txt") 
-    f = open(freesurferVersionFile, 'r')
-    freesurferVersionString = f.readline()
+    fs_version_file = os.path.join(os.getenv("FREESURFER_HOME"),"build-stamp.txt") 
+    f = open(fs_version_file, 'r')
+    fs_version_str = f.readline()
     f.close()
-    freesurferVersionString = freesurferVersionString.replace('-v',' ')
-    freesurferVersionString = re.split('[ -F]+', freesurferVersionString)
-    freesurferVersion = freesurferVersionString[5]
+    fs_version_str = fs_version_str.replace('-v',' ')
+    fs_version_str = re.split('[ -F]+', fs_version_str)
+    fs_version = fs_version_str[5]
     
     # Create new output directory for subject
-    subjOutDir = os.path.join(outDir,subjName)
-    if not subjOutDir:
-        os.mkdir(subjOutDir)
+    subjout_dir = os.path.join(out_dir,subj_name)
+    if not subjout_dir:
+        os.mkdir(subjout_dir)
      
-    numSurfFiles = len(surfFiles)
-    numCurvFiles = len(curvFiles)
-    os.chdir(os.path.join(subjDir,subjName,"surf"))
+    num_surf_files = len(surf_files)
+    num_curv_files = len(curv_files)
+    os.chdir(os.path.join(subj_dir,subj_name,"surf"))
     
     # Figure out the shifting of coordinate systems:
     # Freesurfer uses vertex coordinates in respect to
@@ -120,15 +126,15 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
     # vox2surfTransformMatrix: Transform of voxels in 256x256 image to surface vertices
     # vox2spaceTransformMatrix: Transform of voxel to subject space
 
-    anatFile = os.path.join(subjDir,subjName,"mri","brain.mgz")
-    mriInfoVox2RasTkrProcess = subprocess.run(["mri_info", anatFile, "--vox2ras-tkr"],\
+    anat_file = os.path.join(subj_dir,subj_name,"mri","brain.mgz")
+    mriInfoVox2RasTkrProcess = subprocess.run(["mri_info", anat_file, "--vox2ras-tkr"],\
                          stdout=subprocess.PIPE,stderr=subprocess.PIPE).\
                          stdout.decode('utf-8').split()
     mriInfoVox2RasTkrProcessOutput = np.array(list(map(float,mriInfoVox2RasTkrProcess)))
     vox2surfTransformMatrix = mriInfoVox2RasTkrProcessOutput.reshape(-1,4)
 
 
-    mriInfoVox2RasProcess = subprocess.run(["mri_info", anatFile, "--vox2ras"],\
+    mriInfoVox2RasProcess = subprocess.run(["mri_info", anat_file, "--vox2ras"],\
                        stdout=subprocess.PIPE,stderr=subprocess.PIPE).\
                        stdout.decode('utf-8').split()
     mriInfoVox2RasProcessOutput = np.array(list(map(float,mriInfoVox2RasProcess)))
@@ -137,66 +143,66 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
     
     # Transform the surfaces from the two hemispheres
     for h in hemisphere:
-        #Convert regSphere
-        regSphere = '.'.join((hem[h],"sphere.reg.surf.gii"))
+        #Convert reg_sphere
+        reg_sphere = '.'.join((hem[h],"sphere.reg.surf.gii"))
 
-        subprocess.call(["mris_convert", ('.'.join((hem[h],"sphere.reg"))),regSphere])
+        subprocess.call(["mris_convert", ('.'.join((hem[h],"sphere.reg"))),reg_sphere])
         
     # Transform all the surface files
-        for i in range(numSurfFiles):
+        for i in range(num_surf_files):
             # Set up file names
-            fileName = '.'.join((hem[h],surfFiles[i],"surf.gii"))
+            file_name = '.'.join((hem[h],surf_files[i],"surf.gii"))
             
-            if len(subjName) == 0:
-                surfGiftiFileName = os.path.join(subjOutDir,('.'.join((Hem[h],surfFiles[i],\
+            if len(subj_name) == 0:
+                surf_gifti_name = os.path.join(subjout_dir,('.'.join((Hem[h],surf_files[i],\
                                                          resolution,'surf.gii'))))
             else:
-                surfGiftiFileName = os.path.join(subjOutDir,('.'.join((subjName,Hem[h],\
-                                                         surfFiles[i],resolution,'surf.gii'))))
+                surf_gifti_name = os.path.join(subjout_dir,('.'.join((subj_name,Hem[h],\
+                                                         surf_files[i],resolution,'surf.gii'))))
                 
-            atlasName = os.path.join(atlasDir,"resample_fsaverage",\
+            atlas_name = os.path.join(atlas_dir,"resample_fsaverage",\
                                       (''.join(("fs_LR-deformed_to-fsaverage.",\
                                                 Hem[h],".sphere.",resolution,"_fs_LR.surf.gii"))))
             
 
-            subprocess.run(["mris_convert", ('.'.join((hem[h],surfFiles[i]))),fileName])
+            subprocess.run(["mris_convert", ('.'.join((hem[h],surf_files[i]))),file_name])
             
 
             subprocess.run(["wb_command", "-surface-resample",\
-                             fileName,regSphere,atlasName,\
-                             "BARYCENTRIC",surfGiftiFileName])
+                             file_name,reg_sphere,atlas_name,\
+                             "BARYCENTRIC",surf_gifti_name])
             
-            surfGifti = nb.load(surfGiftiFileName)
+            surf_gifti = nib.load(surf_gifti_name)
             
-            if (alignSurf[i]):
-                [surfGifti.darrays[0].coordsys.xform[:,0],surfGifti.darrays[0].coordsys.xform[:,1],\
-                 surfGifti.darrays[0].coordsys.xform[:,2]]=\
-                 affine_transform(surfGifti.darrays[0].\
-                 coordsys.xform[:,0],surfGifti.darrays[0].coordsys.xform[:,1],\
-                 surfGifti.darrays[0].coordsys.xform[:,2],surf2spaceTransformMatrix)
+            if (align_surf[i]):
+                [surf_gifti.darrays[0].coordsys.xform[:,0],surf_gifti.darrays[0].coordsys.xform[:,1],\
+                 surf_gifti.darrays[0].coordsys.xform[:,2]]=\
+                 affine_transform(surf_gifti.darrays[0].\
+                 coordsys.xform[:,0],surf_gifti.darrays[0].coordsys.xform[:,1],\
+                 surf_gifti.darrays[0].coordsys.xform[:,2],surf2spaceTransformMatrix)
                 
-            nb.save(surfGifti,surfGiftiFileName)
+            nib.save(surf_gifti,surf_gifti_name)
             
     # Transform all the curvature files
-        for i in range(numCurvFiles):
+        for i in range(num_curv_files):
             # Set up file names
-            fileName = '.'.join((hem[h],curvFiles[i],"shape.gii"))
-            if len(subjName) == 0:
-                curvGiftiFileName = os.path.join(subjOutDir,('.'.join((Hem[h],curvFiles[i],\
+            file_name = '.'.join((hem[h],curv_files[i],"shape.gii"))
+            if len(subj_name) == 0:
+                curv_gifti_name = os.path.join(subjout_dir,('.'.join((Hem[h],curv_files[i],\
                                                          resolution,"shape.gii"))))
             else:
-                curvGiftiFileName = os.path.join(subjOutDir,('.'.join((subjName,Hem[h],\
-                                                         curvFiles[i],resolution,"shape.gii"))))
-            atlasName = os.path.join(atlasDir,"resample_fsaverage",\
+                curv_gifti_name = os.path.join(subjout_dir,('.'.join((subj_name,Hem[h],\
+                                                         curv_files[i],resolution,"shape.gii"))))
+            atlas_name = os.path.join(atlas_dir,"resample_fsaverage",\
                                      (''.join(("fs_LR-deformed_to-fsaverage.",\
                                                Hem[h],".sphere.",resolution,"_fs_LR.surf.gii"))))
                 
-            subprocess.run(["mris_convert", "-c", ('.'.join((hem[h],curvFiles[i]))),\
-                            ('.'.join((hem[h],surfFiles[0]))), fileName])
+            subprocess.run(["mris_convert", "-c", ('.'.join((hem[h],curv_files[i]))),\
+                            ('.'.join((hem[h],surf_files[0]))), file_name])
             subprocess.run(["wb_command", "-metric-resample",\
-                             fileName, regSphere, atlasName, "BARYCENTRIC", curvGiftiFileName])           
+                             file_name, reg_sphere, atlas_name, "BARYCENTRIC", curv_gifti_name])           
 
-def coords_to_voxelidxs(coords,volDef):
+def coords_to_voxelidxs(coords, vol_def):
     """
     Maps coordinates to linear voxel indices
 
@@ -210,7 +216,7 @@ def coords_to_voxelidxs(coords,volDef):
         linidxsrs (N-array or PxQ matrix):
             Linear voxel indices
     """
-    mat = np.array(volDef.affine)
+    mat = np.array(vol_def.affine)
 
     # Check that coordinate transformation matrix is 4x4
     if (mat.shape != (4,4)):
@@ -237,12 +243,18 @@ def coords_to_voxelidxs(coords,volDef):
     ijk = np.rint(ijk)[0:3,:]
     # Now set the indices out of range to -1
     for i in range(3):
-        ijk[i,ijk[i,:]>=volDef.shape[i]]=-1
+        ijk[i,ijk[i,:]>=vol_def.shape[i]]=-1
     return ijk
 
-def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
-            ignoreZeros=0, excludeThres=0, depths=[0,0.2,0.4,0.6,0.8,1.0],
-            stats='nanmean'):
+def vol_to_surf(
+    volumes, 
+    white_surf, 
+    pial_surf,
+    ignore_zeros=0, 
+    exclude_threshold=0, 
+    depths=[0,0.2,0.4,0.6,0.8,1.0],
+    stats='nanmean'
+    ):
     """
     Maps volume data onto a surface, defined by white and pial surface.
     Function enables mapping of volume-based data onto the vertices of a
@@ -271,12 +283,12 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
     INPUTS:
         volumes (list):
             List of filenames, or nibable.NiftiImage  to be mapped
-        whiteSurfGifti (string or nibabel.GiftiImage):
+        white_surf (string or nibabel.GiftiImage):
             White surface, filename or loaded gifti object
-        pialSurfGifti (string or nibabel.GiftiImage):
+        pial_surf (string or nibabel.GiftiImage):
             Pial surface, filename or loaded gifti object
     OPTIONAL:
-        ignoreZeros (bool):
+        ignore_zeros (bool):
             Should zeros be ignored in mapping? DEFAULT:  False
         depths (array-like):
             Depths of points along line at which to map (0=white/gray, 1=pial).
@@ -285,14 +297,14 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
             function that calculates the Statistics to be evaluated.
             lambda X: np.nanmean(X,axis=0) default and used for activation data
             lambda X: scipy.stats.mode(X,axis=0) used when discrete labels are sampled. The most frequent label is assigned.
-        excludeThres (float):
+        exclude_threshold (float):
             Threshold enables the exclusion of voxels that touch the surface
             in two distinct places
             (e.g., voxels that lie in the middle of a sulcus). If a voxel projects to two separate place
             on the surface, the algorithm excludes it, if the proportion of the bigger cluster
             is smaller than the threshold. (i.e. threshold = 0.9 means that the voxel has to
             lie at least to 90% on one side of the sulcus).
-            **** Currently not supported.  excludeThres is automatically reset to 0. ****
+            **** Currently not supported.  exclude_threshold is automatically reset to 0. ****
             DEFAULT: 0
 
     OUTPUT:
@@ -304,18 +316,18 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
     firstGood = None
     depths = np.array(depths)
 
-    if excludeThres != 0:
-        print('Warning: excludeThres option currently not supported. Resetting excludeThres to 0.')
-        excludeThres = 0
+    if exclude_threshold != 0:
+        print('Warning: exclude_threshold option currently not supported. Resetting exclude_threshold to 0.')
+        exclude_threshold = 0
 
     numPoints = len(depths)
 
-    whiteSurfGiftiImage = nb.load(whiteSurfGifti)
-    pialSurfGiftiImage = nb.load(pialSurfGifti)
+    white_surf_img = nib.load(white_surf)
+    pial_surf_img = nib.load(pial_surf)
 
-    c1 = whiteSurfGiftiImage.darrays[0].data
-    c2 = pialSurfGiftiImage.darrays[0].data
-    faces = whiteSurfGiftiImage.darrays[1].data
+    c1 = white_surf_img.darrays[0].data
+    c2 = pial_surf_img.darrays[0].data
+    faces = white_surf_img.darrays[1].data
 
     numVerts = c1.shape[0]
 
@@ -324,7 +336,7 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
 
     for i in range(len(volumes)):
         try:
-            a = nb.load(volumes[i])
+            a = nib.load(volumes[i])
             Vols.append(a)
             firstGood = i
         except:
@@ -341,79 +353,6 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
         ijk = coords_to_voxelidxs(c,Vols[firstGood])
         indices[i] = ijk.T
 
-# indices = np.transpose(np.squeeze(np.asarray(indices)))
-    # indices = indices.astype(int)
-
-
-    # Case: excludeThres > 0
-    # If necessary, now ensure that voxels are mapped on to continuous location
-    # only on the flat map - exclude voxels that are assigned to two sides of
-    # the sulcus
-#    if (excludeThres>0):
-#        exclude = np.zeros([np.prod(V[1].shape),1])
-#        if not faces:
-#            sys.exit('provide faces (topology data), so that projections should be avoided')
-#        S.Tiles = faces
-
-        # Precalculate edges for fast cluster finding
-#        print('Calculating edges.')
-#        S.numNodes = np.max(np.max(S.Tiles))
-#        for i in range (3):
-#            i1 = S.Tiles[:,i]
-#            i2 = S.Tiles[:,np.remainder(i,3)+1]
-#            S.Edges.append(i1,i2)
-#        S.Edges = np.unique(S.Edges,axis=0)
-
-        # Generate connectivity matrix
-        # csr_matrix((data, (row_ind, col_ind)), [shape=(M, N)])
-#        data = np.ones(len(S.Edges))
-#        rowInd = S.Edges[:,0]
-#        colInd = S.Edges[:,1]
-#        M = S.numNodes
-#        G = sparse.csr_matrix((data,(rowInd,colInd)),shape=(M,M))
-
-        # Cluster the projections to the surface and exclude all voxels
-        # in which the weight of the biggest cluster is not > thres
-#        print('Checking projections.')
-#        I = np.unique(indices[np.isfinite(indices)])
-#        for i in I:
-
-            # Calculate the weight of voxel on node
-#            weight = np.sum(indices==1,1)
-#            indx = np.where(weight>0)[0]
-
-            # Check whether the nodes cluster
-#            H = G[indx,indx]
-#            H = H+np.transpose(H)+sparse.identity(len(H))
-            # Matlab vairable translation: p=rowPerm,q=colPerm,r=rowBlock,s=colBlock
-#            nb,rowPerm,colPerm,rowBlock,colBlock,coarseRowBlock,coarseColBlock = H.sparsify().btf()
-#            CL = np.zeros(np.shape(indx))
-#            for c in range(len(rowBlock)-1):
-#                CL[rowPerm[rowBlock[c]]:rowBlock[(c+1)]-1,0]=c
-
-#            if (np.max(CL)>1):
-#                weight_cl=np.zeros([np.max(CL),1])
-#                for cl in range(np.max(CL)):
-#                    weight_cl[cl,0] = np.sum(weight[indx[CL==cl]])
-#                [m,cl] = np.max(weight_cl)
-#                if (m/np.sum(weight_cl)>excludeThres):
-#                    A = indices[indx[CL!=cl],:]
-#                    A[A==i] = np.nan
-#                    indices[indx[CL!=cl],:] = A
-#                    exclude[i] = 1
-#                    print('assigned: %2.3f'.format(m/np.sum(weight_cl)))
-#                else:
-#                    A[A==i] = np.nan
-#                    indices[indx,:] = A
-#                    exclude[i] = 2
-#                    print('excluded: %2.3f %d'.format(m/np.sum(weight_cl),np.max(CL)))
-
-        # For debugging: save the volume showing the exluded voxels in current
-        # directory
-#        Vexcl = V[1]
-#        Vexcl.set_filename = 'excl.nii'
-#        nb.save(np.reshape(exclude,np.array(Vexcl.shape)),'excl.nii')
-
    # Read the data and map it
     data = np.zeros((numPoints,numVerts))
     mapped_data = np.zeros((numVerts,len(Vols)))
@@ -422,7 +361,7 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
             pass
         else:
             X = vol.get_data()
-            if (ignoreZeros>0):
+            if (ignore_zeros>0):
                 X[X==0] = np.nan
             for p in range(numPoints):
                 data[p,:] = X[indices[p,:,0],indices[p,:,1],indices[p,:,2]]
@@ -441,33 +380,45 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
 
     return mapped_data
 
-def make_func_gifti(data,anatomical_struct='CortexLeft',column_names=[]):
+def make_func_gifti_cortex(
+    data, 
+    anatomical_struct='CortexLeft', 
+    column_names=None
+    ):
     """
     Generates a function GiftiImage from a numpy array
        @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
 
-    INPUTS:
-        data (np.array):
-             numVert x numCol data
-        anatomical_struct (string):
-            Anatomical Structure for the Meta-data default= 'CortexLeft'
-        column_names (list):
-            List of strings for names for columns
-    OUTPUTS:
-        FuncGifti (functional GiftiImage)
+    Args:
+        data (np array): shape (vertices x columns) 
+        anatomical_struct (str): Anatomical Structure for the Meta-data default='CortexLeft'
+        column_names (list or None): List of strings for column names, default is None
+    Returns:
+        gifti (functional GiftiImage)
     """
-    numVerts, numCols = data.shape
-    #
+
+    if anatomical_struct=='L':
+        anatomical_struct = 'CortexLeft'
+    elif anatomical_struct=='R':
+        anatomical_struct = 'CortexRight'
+
+    try:
+        num_verts, num_cols = data.shape
+    except: 
+        data = np.reshape(data, (len(data),1))
+        num_verts, num_cols  = data.shape
+  
     # Make columnNames if empty
-    if len(column_names)==0:
-        for i in range(numCols):
+    if column_names is None:
+        column_names = []
+        for i in range(num_cols):
             column_names.append("col_{:02d}".format(i+1))
 
-    C = nb.gifti.GiftiMetaData.from_dict({
+    C = nib.gifti.GiftiMetaData.from_dict({
     'AnatomicalStructurePrimary': anatomical_struct,
     'encoding': 'XML_BASE64_GZIP'})
 
-    E = nb.gifti.gifti.GiftiLabel()
+    E = nib.gifti.gifti.GiftiLabel()
     E.key = 0
     E.label= '???'
     E.red = 1.0
@@ -476,21 +427,27 @@ def make_func_gifti(data,anatomical_struct='CortexLeft',column_names=[]):
     E.alpha = 0.0
 
     D = list()
-    for i in range(numCols):
-        d = nb.gifti.GiftiDataArray(
+    for i in range(num_cols):
+        d = nib.gifti.GiftiDataArray(
             data=np.float32(data[:, i]),
             intent='NIFTI_INTENT_NONE',
             datatype='NIFTI_TYPE_FLOAT32',
-            meta=nb.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
+            meta=nib.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
         )
         D.append(d)
 
-    gifti = nb.gifti.GiftiImage(meta=C, darrays=D)
+    gifti = nib.gifti.GiftiImage(meta=C, darrays=D)
     gifti.labeltable.labels.append(E)
 
     return gifti
 
-def make_label_gifti(data,anatomical_struct='CortexLeft',label_names=[],column_names=[],label_RGBA=[]):
+def make_label_gifti_cortex(
+    data, 
+    anatomical_struct='CortexLeft', 
+    label_names=None,
+    column_names=None, 
+    label_RGBA=None
+    ):
     """
     Generates a label GiftiImage from a numpy array
        @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
@@ -499,50 +456,69 @@ def make_label_gifti(data,anatomical_struct='CortexLeft',label_names=[],column_n
         data (np.array):
              numVert x numCol data
         anatomical_struct (string):
-            Anatomical Structure for the Meta-data default= 'CortexLeft'
-        label_names (list):
-            List of label names 
+            Anatomical Structure for the Meta-data default= 'CortexLeft' or 'L'; 'CortexRight' or 'R'
+        label_names (list): 
+            List of strings for label names
         column_names (list):
             List of strings for names for columns
-        label_RGBA (np.array):
-            numLabels x 4 np-array (each element is 0-1)
+        label_RGBA (list):
+            List of rgba vectors
     OUTPUTS:
         gifti (label GiftiImage)
 
     """
-    numVerts, numCols = data.shape
-    numLabels = len(np.unique(data))
+
+    if anatomical_struct=='L':
+        anatomical_struct = 'CortexLeft'
+    elif anatomical_struct=='R':
+        anatomical_struct = 'CortexRight'
+
+    try:
+        num_verts, num_cols = data.shape
+    except: 
+        data = np.reshape(data, (len(data),1))
+        num_verts, num_cols  = data.shape
+
+    num_labels = len(np.unique(data))
+
+    # check for 0 labels
+    zero_label = 0 in data
 
     # Create naming and coloring if not specified in varargin
     # Make columnNames if empty
-    if len(column_names) == 0:
-        for i in range(numLabels):
+    if column_names is None:
+        column_names = []
+        for i in range(num_cols):
             column_names.append("col_{:02d}".format(i+1))
 
     # Determine color scale if empty
-    if len(label_RGBA) == 0:
-        hsv = plt.cm.get_cmap('hsv',numLabels)
-        color = hsv(np.linspace(0,1,numLabels))
+    if label_RGBA is None:
+        hsv = plt.cm.get_cmap('hsv',num_labels)
+        color = hsv(np.linspace(0,1,num_labels))
         # Shuffle the order so that colors are more visible
-        color = color[np.random.permutation(numLabels)]
-        label_RGBA = np.zeros([numLabels,4])
-        for i in range(numLabels):
+        color = color[np.random.permutation(num_labels)]
+        label_RGBA = np.zeros([num_labels,4])
+        for i in range(num_labels):
             label_RGBA[i] = color[i]
+        if zero_label:
+            label_RGBA = np.vstack([[0,0,0,1], label_RGBA[1:,]])
 
     # Create label names
-    if len(label_names) == 0:
-        for i in range(numLabels):
-            label_names.append("label-{:02d}".format(i+1))
+    if label_names is None:
+        idx = 0
+        if not zero_label:
+            idx = 1
+        for i in range(num_labels):
+            label_names.append("label-{:02d}".format(i + idx))
 
     # Create label.gii structure
-    C = nb.gifti.GiftiMetaData.from_dict({
+    C = nib.gifti.GiftiMetaData.from_dict({
         'AnatomicalStructurePrimary': anatomical_struct,
         'encoding': 'XML_BASE64_GZIP'})
 
-    num_labels = np.arange(numLabels)
     E_all = []
-    for (label, rgba, name) in zip(num_labels, label_RGBA, label_names):
-        E = nb.gifti.gifti.GiftiLabel()
+    for (label,rgba,name) in zip(np.arange(num_labels),label_RGBA,label_names):
+        E = nib.gifti.gifti.GiftiLabel()
         E.key = label 
         E.label= name
         E.red = rgba[0]
@@ -553,58 +529,373 @@ def make_label_gifti(data,anatomical_struct='CortexLeft',label_names=[],column_n
         E_all.append(E)
 
     D = list()
-    for i in range(numCols):
-        d = nb.gifti.GiftiDataArray(
+    for i in range(num_cols):
+        d = nib.gifti.GiftiDataArray(
             data=np.float32(data[:, i]),
-            intent='NIFTI_INTENT_LABEL',
-            datatype='NIFTI_TYPE_UINT8',
-            meta=nb.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
+            intent='NIFTI_INTENT_LABEL', 
+            datatype='NIFTI_TYPE_FLOAT32', # was NIFTI_TYPE_INT32
+            meta=nib.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
         )
         D.append(d)
 
     # Make and return the gifti file
-    gifti = nb.gifti.GiftiImage(meta=C, darrays=D)
+    gifti = nib.gifti.GiftiImage(meta=C, darrays=D)
     gifti.labeltable.labels.extend(E_all)
-    return gifti 
+    return gifti
 
-def get_gifti_column_names(G):
+def get_gifti_columns(
+    gifti
+    ):
+    """get column names from gifti
+
+    Args: 
+        gifti (str or nib obj): full path to atlas (*.label.gii or *.func.gii) or nib gifti obj
+    Returns: 
+        column_names (list): list of column names
     """
-    Created on Mon Mar 25 21:11:31 2019
+    if isinstance(gifti, str):
+        img = nib.load(gifti)
+    else:
+        img = gifti
 
-    Returns the column names from a functional gifti file.
+    column_names = []
+    for col in img.darrays:
+        col_name =  list(col.metadata.values())[0]
+        column_names.append(col_name)
 
-    INPUT:
-    G:				Nibabel gifti object
+    return column_names
 
-    OUTPUT:
-    names:			List of column names from gifti object attribute data arrays
+def get_gifti_labels(
+    gifti
+    ):
+    """get gifti labels for fpath (should be *.label.gii)
 
-    @author: jdiedrichsen (Python conversion: switt)
+    Args: 
+        gifti (str or nib obj): full path to atlas (*.label.gii) or nib obj
+    Returns: 
+        labels (list): list of label names
     """
-    N = len(G.darrays)
-    names = []
-    for n in range(N):
-        for i in range(len(G.darrays[n].meta.data)):
-            if 'Name' in G.darrays[n].meta.data[i].name:
-                names.append(G.darrays[n].meta.data[i].value)
-    return names
+    if isinstance(gifti, str):
+        img = nib.load(gifti)
+    else:
+        img = gifti
 
+    # labels = img.labeltable.get_labels_as_dict().values()
+    label_dict = img.labeltable.get_labels_as_dict()
 
-def get_gifti_anatomical_struct(G):
+    return list(label_dict.values())
+
+def get_gifti_anatomical_struct(
+    gifti
+    ):
     """
     Returns the primary anatomical structure for a gifti object.
 
     INPUT:
-    G:				Nibabel gifti object
+    gifti:				Nibabel gifti object
 
     OUTPUT:
-    anatStruct:		AnatomicalStructurePrimary attribute from gifti object
+    anat_struct:		AnatomicalStructurePrimary attribute from gifti object
 
     @author: jdiedrichsen (Python conversion: switt)
     """
-    N = len(G._meta.data)
-    anatStruct = []
+    N = len(gifti._meta.data)
+    anat_struct = []
     for i in range(N):
-        if 'AnatomicalStructurePrimary' in G._meta.data[i].name:
-            anatStruct.append(G._meta.data[i].value)
-    return anatStruct
+        if 'AnatomicalStructurePrimary' in gifti._meta.data[i].name:
+            anat_struct.append(gifti._meta.data[i].value)
+    return anat_struct
+
+def get_gifti_colors(
+    gifti,
+    ignore_0=True
+    ):
+    """get gifti labels(should be *.label.gii)
+
+    Args: 
+        gifti (str or nibabel gifti obj): full path to atlas or gifti object
+        ignore_0 (bool): default is True. ignores 0 index
+    Returns: 
+        rgba (np array): shape num_labels x num_rgba
+        cpal (matplotlib color palette)
+        cmap (matplotlib colormap)
+    """
+    if isinstance(gifti, str):
+        img = nib.load(gifti)
+    else:
+        img = gifti
+
+    labels = img.labeltable.labels
+
+    rgba = np.zeros((len(labels),4))
+    for i,label in enumerate(labels):
+        rgba[i,] = labels[i].rgba
+    
+    if ignore_0:
+        rgba = rgba[1:]
+        labels = labels[1:]
+
+    cmap = LinearSegmentedColormap.from_list('mylist', rgba, N=len(rgba))
+    mpl.cm.register_cmap("mycolormap", cmap)
+    cpal = sns.color_palette("mycolormap", n_colors=len(rgba))
+
+    return rgba, cpal, cmap
+
+def plotmap(
+    data, 
+    surf, 
+    underlay=None,
+    undermap='Greys', 
+    underscale=None, 
+    overlay_type='func', 
+    threshold=None,
+    cmap=None,
+    cscale=None, 
+    borders=None, 
+    alpha=1.0,
+    outputfile=None,
+    render='matplotlib'
+    ):
+    """
+    Visualised cerebellar cortical acitivty on a flatmap in a matlab window
+    INPUT:
+        data (np.array, giftiImage, or name of gifti file)
+            Data to be plotted 
+        surf (str or giftiImage)
+            Flat surface file for flatmap
+        underlay (str, giftiImage, or np-array)
+            Full filepath of the file determining underlay coloring (default: SUIT.shape.gii in SUIT pkg)
+        undermap (str)
+            Matplotlib colormap used for underlay (default: gray)
+        underscale (array-like)
+            Colorscale [min, max] for the underlay (default: [-1, 0.5])
+        overlay_type (str)
+            'func': functional activation 'label': categories 'rgb': RGB values (default: func)
+        threshold (scalar or array-like)
+            Threshold for functional overlay. If one value is given, it is used as a positive threshold.
+            If two values are given, an positive and negative threshold is used.
+        cmap (str)
+            Matplotlib colormap used for overlay (defaults to 'jet' if none given)
+        borders (str)
+            Full filepath of the borders txt file (default: borders.txt in SUIT pkg)
+        cscale (int array)
+            Colorscale [min, max] for the overlay, valid input values from -1 to 1 (default: [overlay.max, overlay.min])
+        alpha (float)
+            Opacity of the overlay (default: 1)
+        outputfile (str)
+            Name / path to file to save figure (default None)
+        render (str)
+            Renderer for graphic display 'matplot' / 'opengl'. Dafault is matplotlib
+    OUTPUT:
+        ax (matplotlib.axis)
+            If render is matplotlib, the function returns the axis
+    """
+
+    # load topology
+    if type(surf) is nib.gifti.gifti.GiftiImage:
+        flatsurf = surf
+    elif type(surf) is str:
+        flatsurf = nib.load(surf)
+    else: 
+        raise NameError('surf needs to be a file name or a GiftiImage')
+    vertices = flatsurf.darrays[0].data
+    faces    = flatsurf.darrays[1].data
+
+    # Underlay 
+    if underlay is not None:
+        # Load underlay and assign color
+        if type(underlay) is not np.ndarray:
+            underlay = nib.load(underlay).darrays[0].data
+        underlay_color = _map_color(faces, underlay, underscale, undermap)
+    else: 
+        # set the underlay to white
+        underlay_color = np.ones((faces.shape[0],4)) 
+
+    # Load the overlay if it's a string
+    if type(data) is str:
+        data = nib.load(data)
+
+    # If it is a giftiImage, figure out colormap
+    if type(data) is nib.gifti.gifti.GiftiImage:
+        if overlay_type == 'label':
+            _, _, cmap = get_gifti_colors(data)
+            data = data.darrays[0].data
+        else:
+            data = data.darrays[0].data
+
+    # If 2d-array, take the first column only
+    if data.ndim>1:
+        data = data[:,0]
+    
+    # depending on data type - type cast into int
+    if overlay_type=='label':
+        i = np.isnan(data)
+        data = data.astype(int)
+        data[i]=0
+
+    # map the overlay to the faces
+    overlay_color  = _map_color(faces, data, cscale, cmap, threshold)
+
+    # Combine underlay and overlay: For Nan overlay, let underlay shine through
+    face_color = underlay_color * (1-alpha) + overlay_color * alpha
+    i = np.isnan(face_color.sum(axis=1))
+    face_color[i,:]=underlay_color[i,:]
+    face_color[i,3]=1.0
+
+    # If present, get the borders
+    if borders is not None:
+        borders = np.genfromtxt(borders, delimiter=',')
+
+    # Render with Matplotlib
+    ax = _render_matplotlib(vertices, faces, face_color, borders)
+    return ax
+
+def _map_color(
+    faces, 
+    data, 
+    scale, 
+    cmap=None, 
+    threshold=None
+    ):
+    """
+    Maps data from vertices to faces, scales the values, and
+    then looks up the RGB values in the color map
+
+    Input:
+        data (1d-np-array)
+            Numpy Array of values to scale. If integer, if it is not scaled
+        scale (array like)
+            (min,max) of the scaling of the data
+        cmap (str, or matplotlib.colors.Colormap)
+            The Matplotlib colormap
+        threshold (array like)
+            (lower, upper) threshold for data display -
+             only data x<lower and x>upper will be plotted
+            if one value is given (-inf) is assumed for the lower
+    """
+
+    # When continuous data, scale and threshold
+    if data.dtype.kind == 'f':
+        # if threshold is given, threshold the data
+        if threshold is not None:
+            if np.isscalar(threshold):
+                threshold=np.array([-np.inf,threshold])
+            data[np.logical_and(data>threshold[0], data<threshold[1])]=np.nan
+
+        # if scale not given, find it
+        if scale is None:
+            scale = np.array([np.nanmin(data), np.nanmax(data)])
+
+        # Scale the data
+        data = ((data - scale[0]) / (scale[1] - scale[0]))
+
+    # Map the values from vertices to faces and integrate
+    numFaces = faces.shape[0]
+    face_value = np.zeros((3,numFaces),dtype = data.dtype)
+    for i in range(3):
+        face_value[i,:] = data[faces[:,i]]
+
+    if data.dtype.kind == 'i':
+        face_value,_ = ss.mode(face_value,axis=0)
+        face_value = face_value.reshape((numFaces,))
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            face_value = np.nanmean(face_value, axis=0)
+
+    # Get the color map
+    if type(cmap) is str:
+        cmap = plt.get_cmap(cmap)
+    elif type(cmap) is np.ndarray:
+        cmap = ListedColormap(cmap)
+    elif cmap is None:
+        cmap = plt.get_cmap('jet')
+
+    # Map the color
+    color_data = cmap(face_value)
+
+    # Set missing data 0 for int or NaN for float to NaN
+    if data.dtype.kind == 'f':
+        color_data[np.isnan(face_value),:]=np.nan
+    elif data.dtype.kind == 'i':
+        color_data[face_value==0,:]=np.nan
+    return color_data
+
+def _render_matplotlib(
+    vertices,
+    faces,
+    face_color, 
+    borders
+    ):
+    """
+    Render the data in matplotlib: This is segmented to allow for openGL renderer
+
+    Input:
+        vertices (np.ndarray)
+            Array of vertices
+        faces (nd.array)
+            Array of Faces
+        face_color (nd.array)
+            RGBA array of color and alpha of all vertices
+    """
+    patches = []
+    for i in range(faces.shape[0]):
+        polygon = Polygon(vertices[faces[i],0:2], True)
+        patches.append(polygon)
+    p = PatchCollection(patches)
+    p.set_facecolor(face_color)
+    p.set_linewidth(0.0)
+
+    # Get the current axis and plot it
+    ax = plt.gca()
+    ax.add_collection(p)
+    xrang = [np.nanmin(vertices[:,0]),np.nanmax(vertices[:,0])]
+    yrang = [np.nanmin(vertices[:,1]),np.nanmax(vertices[:,1])]
+
+    ax.set_xlim(xrang[0],xrang[1])
+    ax.set_ylim(yrang[0],yrang[1])
+    ax.axis('equal')
+    ax.axis('off')
+
+    if borders is not None:
+        ax.plot(borders[:,0],borders[:,1],color='k',
+                marker='.', linestyle=None,
+                markersize=2,linewidth=0)
+    return ax
+
+def plot_colorbar(
+    gifti, 
+    ):
+    """plots colorbar for *.label.gii file
+        
+    Args:
+        gifti (str or nib gifti obj): full path to *.label.gii or nibabel gifti obj
+    """
+    if isinstance(gifti, str):
+        img = nib.load(gifti)
+    else:
+        img = gifti
+
+    plt.figure()
+    fig, ax = plt.subplots(figsize=(1,10)) # figsize=(1, 10)
+    # fig, ax = plt.figure()
+
+    rgba, cpal, cmap = get_gifti_colors(img)
+    labels = get_gifti_labels(img)
+
+    bounds = np.arange(cmap.N + 1)
+
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+    cb3 = mpl.colorbar.ColorbarBase(ax, cmap=cmap.reversed(cmap), 
+                                    norm=norm,
+                                    ticks=bounds,
+                                    format='%s',
+                                    orientation='vertical',
+                                    )
+    cb3.set_ticklabels(labels[::-1])  
+    cb3.ax.tick_params(size=0)
+    cb3.set_ticks(bounds+.5)
+    cb3.ax.tick_params(axis='y', which='major', labelsize=30)
+
+    return cb3
+

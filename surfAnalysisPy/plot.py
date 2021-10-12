@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 """
-
 import numpy as np
 import os
 import sys
@@ -657,12 +656,12 @@ def plotmap(
     render='matplotlib'
     ):
     """
-    Visualised cerebellar cortical acitivty on a flatmap in a matlab window
+    Visualised cortical acitivty on a flatmap in a matlab window
     INPUT:
         data (np.array, giftiImage, or name of gifti file)
             Data to be plotted 
         surf (str or giftiImage)
-            Flat surface file for flatmap
+            Flat/Pial/White/Inflated surface file for flatmap
         underlay (str, giftiImage, or np-array)
             Full filepath of the file determining underlay coloring (default: SUIT.shape.gii in SUIT pkg)
         undermap (str)
@@ -677,7 +676,7 @@ def plotmap(
         cmap (str)
             Matplotlib colormap used for overlay (defaults to 'jet' if none given)
         borders (str)
-            Full filepath of the borders txt file (default: borders.txt in SUIT pkg)
+            Full filepath of the borders txt file
         cscale (int array)
             Colorscale [min, max] for the overlay, valid input values from -1 to 1 (default: [overlay.max, overlay.min])
         alpha (float)
@@ -863,22 +862,22 @@ def _render_matplotlib(
                 markersize=2,linewidth=0)
     return ax
 
-def plot_colorbar(
+def save_colorbar(
     gifti, 
+    outpath
     ):
     """plots colorbar for *.label.gii file
         
     Args:
         gifti (str or nib gifti obj): full path to *.label.gii or nibabel gifti obj
+        outpath (str): fullpath to save out colorbar to disk
     """
     if isinstance(gifti, str):
         img = nib.load(gifti)
     else:
         img = gifti
 
-    plt.figure()
     fig, ax = plt.subplots(figsize=(1,10)) # figsize=(1, 10)
-    # fig, ax = plt.figure()
 
     rgba, cpal, cmap = get_gifti_colors(img)
     labels = get_gifti_labels(img)
@@ -896,6 +895,8 @@ def plot_colorbar(
     cb3.ax.tick_params(size=0)
     cb3.set_ticks(bounds+.5)
     cb3.ax.tick_params(axis='y', which='major', labelsize=30)
+
+    plt.savefig(outpath, bbox_inches='tight', dpi=150)
 
     return cb3
 

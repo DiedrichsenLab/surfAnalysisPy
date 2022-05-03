@@ -14,6 +14,7 @@ import pathlib
 import subprocess
 import nibabel as nb
 import warnings
+import matplotlib.pyplot as plt
 
 def affine_transform(x1,x2,x3,M):
     """
@@ -510,6 +511,8 @@ def make_label_gifti(data,anatomical_struct='CortexLeft',label_names=[],column_n
         gifti (label GiftiImage)
 
     """
+    if data.ndim==1: 
+        data=data.reshape(-1,1)
     numVerts, numCols = data.shape
     numLabels = len(np.unique(data))
 

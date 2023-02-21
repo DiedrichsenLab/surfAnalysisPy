@@ -9,6 +9,7 @@ from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import ListedColormap
 import warnings
+from SUITPy.flatmap import get_gifti_colortable
 
 _base_dir = os.path.dirname(os.path.abspath(__file__))
 _surf_dir = os.path.join(_base_dir, 'standard_mesh')
@@ -79,7 +80,7 @@ def plotmap(data, surf, underlay = None,
     # If it is a giftiImage, figure out colormap
     if type(data) is nb.gifti.gifti.GiftiImage:
         if overlay_type == 'label':
-            cmap = get_gifti_colortable(data)
+            cmap,_ = get_gifti_colortable(data)
             data = data.darrays[0].data
         else:
             data = data.darrays[0].data

@@ -9,7 +9,6 @@ from matplotlib.patches import Polygon
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import ListedColormap
 import warnings
-from SUITPy.flatmap import get_gifti_colortable
 
 _base_dir = os.path.dirname(os.path.abspath(__file__))
 _surf_dir = os.path.join(_base_dir, 'standard_mesh')
@@ -213,3 +212,26 @@ def _render_matplotlib(vertices,faces,face_color, borders):
                 marker='.', linestyle=None,
                 markersize=2,linewidth=0)
     return ax
+
+def get_gifti_colortable(gifti):
+    """Returns the RGBA color table and matplotlib cmap from gifti object (*.label.gii)
+    Args:
+        gifti (gifti image):
+            Nibabel Gifti image
+    Returns:
+        rgba (np.ndarray):
+            N x 4 of RGB values
+        cmap (mpl obj):
+            matplotlib colormap
+    """
+    labels = gifti.labeltable.labels
+
+    rgba = np.zeros((len(labels),4))
+    for i,label in enumerate(labels):
+        rgba[i,] = labels[i].rgba
+
+    cmap = ListedColormap(rgba)
+    matplotlib.cm.unregister_cmap("mycolormap")
+    matplotlib.cm.register_cmap("mycolormap", cmap)
+
+    return rgba, cmap

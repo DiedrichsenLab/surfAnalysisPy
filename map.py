@@ -355,7 +355,7 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
         if vol is None:
             pass
         else:
-            X = vol.get_data()
+            X = vol.get_fdata()
             if (ignoreZeros>0):
                 X[X==0] = np.nan
             for p in range(numPoints):

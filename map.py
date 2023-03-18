@@ -15,26 +15,7 @@ import subprocess
 import nibabel as nb
 import warnings
 import matplotlib.pyplot as plt
-
-def affine_transform(x1,x2,x3,M):
-    """
-    Returns affine transform of x
-    INPUT:
-        x1 (np-array): X-coordinate of original
-        x2 (np-array): Y-coordinate of original
-        x3 (np-array): Z-coordinate of original
-        M (2d-array): 4x4 transformation matrix
-
-    OUTPUT:
-        x1 (np-array): X-coordinate of transform
-        x2 (np-array): Y-coordinate of transform
-        x3 (np-array): Z-coordinate of transform
-        transformed coordinates: same form as x1,x2,x3
-    """
-    y1 = np.multiply(M[0,0],x1) + np.multiply(M[0,1],x2) + np.multiply(M[0,2],x3) + M[0,3]
-    y2 = np.multiply(M[1,0],x1) + np.multiply(M[1,1],x2) + np.multiply(M[1,2],x3) + M[1,3]
-    y3 = np.multiply(M[2,0],x1) + np.multiply(M[2,1],x2) + np.multiply(M[2,2],x3) + M[2,3]
-    return (y1,y2,y3)
+import nitools as nt
 
 def reslice_fs_to_wb(subjName,subjDir,outDir,\
                  smoothing=1,surfFiles=["white","pial","inflated"],\
@@ -149,11 +130,9 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
             fileName = '.'.join((hem[h],surfFiles[i],"surf.gii"))
             
             if len(subjName) == 0:
-                surfGiftiFileName = os.path.join(subjOutDir,('.'.join((Hem[h],surfFiles[i],\
-                                                         resolution,'surf.gii'))))
+                surfGiftiFileName = os.path.join(subjOutDir,('.'.join((Hem[h],surfFiles[i],resolution,'surf.gii'))))
             else:
-                surfGiftiFileName = os.path.join(subjOutDir,('.'.join((subjName,Hem[h],\
-                                                         surfFiles[i],resolution,'surf.gii'))))
+                surfGiftiFileName = os.path.join(subjOutDir,('.'.join((subjName,Hem[h],surfFiles[i],resolution,'surf.gii'))))
                 
             atlasName = os.path.join(atlasDir,"resample_fsaverage",\
                                       (''.join(("fs_LR-deformed_to-fsaverage.",\
@@ -172,7 +151,7 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
             if (alignSurf[i]):
                 [surfGifti.darrays[0].coordsys.xform[:,0],surfGifti.darrays[0].coordsys.xform[:,1],\
                  surfGifti.darrays[0].coordsys.xform[:,2]]=\
-                 affine_transform(surfGifti.darrays[0].\
+                 nt.affine_transform(surfGifti.darrays[0].\
                  coordsys.xform[:,0],surfGifti.darrays[0].coordsys.xform[:,1],\
                  surfGifti.darrays[0].coordsys.xform[:,2],surf2spaceTransformMatrix)
                 
@@ -183,11 +162,9 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
             # Set up file names
             fileName = '.'.join((hem[h],curvFiles[i],"shape.gii"))
             if len(subjName) == 0:
-                curvGiftiFileName = os.path.join(subjOutDir,('.'.join((Hem[h],curvFiles[i],\
-                                                         resolution,"shape.gii"))))
+                curvGiftiFileName = os.path.join(subjOutDir,('.'.join((Hem[h],curvFiles[i],resolution,"shape.gii"))))
             else:
-                curvGiftiFileName = os.path.join(subjOutDir,('.'.join((subjName,Hem[h],\
-                                                         curvFiles[i],resolution,"shape.gii"))))
+                curvGiftiFileName = os.path.join(subjOutDir,('.'.join((subjName,Hem[h],curvFiles[i],resolution,"shape.gii"))))
             atlasName = os.path.join(atlasDir,"resample_fsaverage",\
                                      (''.join(("fs_LR-deformed_to-fsaverage.",\
                                                Hem[h],".sphere.",resolution,"_fs_LR.surf.gii"))))
@@ -196,50 +173,6 @@ def reslice_fs_to_wb(subjName,subjDir,outDir,\
                             ('.'.join((hem[h],surfFiles[0]))), fileName])
             subprocess.run(["wb_command", "-metric-resample",\
                              fileName, regSphere, atlasName, "BARYCENTRIC", curvGiftiFileName])           
-
-def coords_to_voxelidxs(coords,volDef):
-    """
-    Maps coordinates to linear voxel indices
-
-    INPUT:
-        coords (3*N matrix or 3xPxQ array):
-            (x,y,z) coordinates
-        voldef (nibabel object):
-            Nibabel object with attributes .affine (4x4 voxel to coordinate transformation matrix from the images to be sampled (1-based)) and shape (1x3 volume dimension in voxels)
-
-    OUTPUT:
-        linidxsrs (N-array or PxQ matrix):
-            Linear voxel indices
-    """
-    mat = np.array(volDef.affine)
-
-    # Check that coordinate transformation matrix is 4x4
-    if (mat.shape != (4,4)):
-        sys.exit('Error: Matrix should be 4x4')
-
-    rs = coords.shape
-    if (rs[0] != 3):
-        sys.exit('Error: First dimension of coords should be 3')
-
-    if (np.size(rs) == 2):
-        nCoordsPerNode = 1
-        nVerts = rs[1]
-    elif (np.size(rs) == 3):
-        nCoordsPerNode = rs[1]
-        nVerts = rs[2]
-    else:
-        sys.exit('Error: Coordindates have %d dimensions, not supported'.format(np.size(rs)))
-
-    # map to 3xP matrix (P coordinates)
-    coords = np.reshape(coords,[3,-1])
-    coords = np.vstack([coords,np.ones((1,rs[1]))])
-
-    ijk = np.linalg.solve(mat,coords)
-    ijk = np.rint(ijk)[0:3,:]
-    # Now set the indices out of range to -1
-    for i in range(3):
-        ijk[i,ijk[i,:]>=volDef.shape[i]]=-1
-    return ijk
 
 def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
             ignoreZeros=0, excludeThres=0, depths=[0,0.2,0.4,0.6,0.8,1.0],
@@ -339,7 +272,7 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
     indices = np.zeros((numPoints,numVerts,3),dtype=int)
     for i in range(numPoints):
         c = (1-depths[i])*c1.T+depths[i]*c2.T
-        ijk = coords_to_voxelidxs(c,Vols[firstGood])
+        ijk = nt.coords_to_voxelidxs(c,Vols[firstGood])
         indices[i] = ijk.T
 
 # indices = np.transpose(np.squeeze(np.asarray(indices)))
@@ -441,173 +374,3 @@ def vol_to_surf(volumes, whiteSurfGifti, pialSurfGifti,
                 mapped_data[:,v] = stats(data)
 
     return mapped_data
-
-def make_func_gifti(data,anatomical_struct='CortexLeft',column_names=[]):
-    """
-    Generates a function GiftiImage from a numpy array
-       @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
-
-    INPUTS:
-        data (np.array):
-             numVert x numCol data
-        anatomical_struct (string):
-            Anatomical Structure for the Meta-data default= 'CortexLeft'
-        column_names (list):
-            List of strings for names for columns
-    OUTPUTS:
-        FuncGifti (functional GiftiImage)
-    """
-    numVerts, numCols = data.shape
-    #
-    # Make columnNames if empty
-    if len(column_names)==0:
-        for i in range(numCols):
-            column_names.append("col_{:02d}".format(i+1))
-
-    C = nb.gifti.GiftiMetaData.from_dict({
-    'AnatomicalStructurePrimary': anatomical_struct,
-    'encoding': 'XML_BASE64_GZIP'})
-
-    E = nb.gifti.gifti.GiftiLabel()
-    E.key = 0
-    E.label= '???'
-    E.red = 1.0
-    E.green = 1.0
-    E.blue = 1.0
-    E.alpha = 0.0
-
-    D = list()
-    for i in range(numCols):
-        d = nb.gifti.GiftiDataArray(
-            data=np.float32(data[:, i]),
-            intent='NIFTI_INTENT_NONE',
-            datatype='NIFTI_TYPE_FLOAT32',
-            meta=nb.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
-        )
-        D.append(d)
-
-    gifti = nb.gifti.GiftiImage(meta=C, darrays=D)
-    gifti.labeltable.labels.append(E)
-
-    return gifti
-
-def make_label_gifti(data,anatomical_struct='CortexLeft',label_names=[],column_names=[],label_RGBA=[]):
-    """
-    Generates a label GiftiImage from a numpy array
-       @author joern.diedrichsen@googlemail.com, Feb 2019 (Python conversion: switt)
-
-    INPUTS:
-        data (np.array):
-             numVert x numCol data
-        anatomical_struct (string):
-            Anatomical Structure for the Meta-data default= 'CortexLeft'
-        label_names (list):
-            List of label names 
-        column_names (list):
-            List of strings for names for columns
-        label_RGBA (np.array):
-            numLabels x 4 np-array (each element is 0-1)
-    OUTPUTS:
-        gifti (label GiftiImage)
-
-    """
-    if data.ndim==1: 
-        data=data.reshape(-1,1)
-    numVerts, numCols = data.shape
-    numLabels = len(np.unique(data))
-
-    # Create naming and coloring if not specified in varargin
-    # Make columnNames if empty
-    if len(column_names) == 0:
-        for i in range(numLabels):
-            column_names.append("col_{:02d}".format(i+1))
-
-    # Determine color scale if empty
-    if len(label_RGBA) == 0:
-        hsv = plt.cm.get_cmap('hsv',numLabels)
-        color = hsv(np.linspace(0,1,numLabels))
-        # Shuffle the order so that colors are more visible
-        color = color[np.random.permutation(numLabels)]
-        label_RGBA = np.zeros([numLabels,4])
-        for i in range(numLabels):
-            label_RGBA[i] = color[i]
-
-    # Create label names
-    if len(label_names) == 0:
-        for i in range(numLabels):
-            label_names.append("label-{:02d}".format(i+1))
-
-    # Create label.gii structure
-    C = nb.gifti.GiftiMetaData.from_dict({
-        'AnatomicalStructurePrimary': anatomical_struct,
-        'encoding': 'XML_BASE64_GZIP'})
-
-    num_labels = np.arange(numLabels)
-    E_all = []
-    for (label, rgba, name) in zip(num_labels, label_RGBA, label_names):
-        E = nb.gifti.gifti.GiftiLabel()
-        E.key = label 
-        E.label= name
-        E.red = rgba[0]
-        E.green = rgba[1]
-        E.blue = rgba[2]
-        E.alpha = rgba[3]
-        E.rgba = rgba[:]
-        E_all.append(E)
-
-    D = list()
-    for i in range(numCols):
-        d = nb.gifti.GiftiDataArray(
-            data=np.float32(data[:, i]),
-            intent='NIFTI_INTENT_LABEL',
-            datatype='NIFTI_TYPE_UINT8',
-            meta=nb.gifti.GiftiMetaData.from_dict({'Name': column_names[i]})
-        )
-        D.append(d)
-
-    # Make and return the gifti file
-    gifti = nb.gifti.GiftiImage(meta=C, darrays=D)
-    gifti.labeltable.labels.extend(E_all)
-    return gifti 
-
-def get_gifti_column_names(G):
-    """
-    Created on Mon Mar 25 21:11:31 2019
-
-    Returns the column names from a functional gifti file.
-
-    INPUT:
-    G:				Nibabel gifti object
-
-    OUTPUT:
-    names:			List of column names from gifti object attribute data arrays
-
-    @author: jdiedrichsen (Python conversion: switt)
-    """
-    N = len(G.darrays)
-    names = []
-    for n in range(N):
-        for i in range(len(G.darrays[n].meta.data)):
-            if 'Name' in G.darrays[n].meta.data[i].name:
-                names.append(G.darrays[n].meta.data[i].value)
-    return names
-
-
-def get_gifti_anatomical_struct(G):
-    """
-    Returns the primary anatomical structure for a gifti object.
-
-    INPUT:
-    G:				Nibabel gifti object
-
-    OUTPUT:
-    anatStruct:		AnatomicalStructurePrimary attribute from gifti object
-
-    @author: jdiedrichsen (Python conversion: switt)
-    """
-    N = len(G._meta.data)
-    anatStruct = []
-    for i in range(N):
-        if 'AnatomicalStructurePrimary' in G._meta.data[i].name:
-            anatStruct.append(G._meta.data[i].value)
-    return anatStruct

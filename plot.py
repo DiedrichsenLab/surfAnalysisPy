@@ -86,68 +86,9 @@ def plotmap(
     Returns:
         ax (matplotlib.axis)
             If render is matplotlib, the function returns the axis
-    """
+        fig (plotly.go.Figure)
+            If render is plotly, it returns Figure object
 
-    # load topology
-    if type(surf) is nb.gifti.gifti.GiftiImage:
-        flatsurf = surf
-    elif type(surf) is str:
-        flatsurf = nb.load(surf)
-    else: 
-        raise NameError('surf needs to be a file name or a GiftiImage')
-    vertices = flatsurf.darrays[0].data
-    faces    = flatsurf.darrays[1].data
-
-    # Underlay 
-    if underlay is not None:
-        # Load underlay and assign color
-        if type(underlay) is not np.ndarray:
-            underlay = nb.load(underlay).darrays[0].data
-        underlay_color = _map_color(faces, underlay, underscale, undermap)
-    else: 
-        # set the underlay to white
-        underlay_color = np.ones((faces.shape[0],4)) 
-
-    # Load the overlay if it's a string
-    if type(data) is str:
-        data = nb.load(data)
-
-    # If it is a giftiImage, figure out colormap
-    if type(data) is nb.gifti.gifti.GiftiImage:
-        if overlay_type == 'label':
-            cmap = get_gifti_colortable(data)
-            data = data.darrays[0].data
-        else:
-            data = data.darrays[0].data
-
-    # If 2d-array, take the first column only
-    if data.ndim>1:
-        data = data[:,0]
-    
-    # depending on data type - type cast into int
-    if overlay_type=='label':
-        i = np.isnan(data)
-        data = data.astype(int)
-        data[i]=0
-
-    # map the overlay to the faces
-    overlay_color  = _map_color(faces, data, cscale, cmap, threshold)
-
-    # Combine underlay and overlay: For Nan overlay, let underlay shine through
-    face_color = underlay_color * (1-alpha) + overlay_color * alpha
-    i = np.isnan(face_color.sum(axis=1))
-    face_color[i,:]=underlay_color[i,:]
-    face_color[i,3]=1.0
-
-    # If present, get the borders
-    if borders is not None:
-        borders = np.genfromtxt(borders, delimiter=',')
-
-    # Render with Matplotlib
-    ax = _render_matplotlib(vertices, faces, face_color, borders)
-    return ax
-
-def _map_color(faces, data, scale, cmap=None, threshold = None):
     """
     if surf=='fs32k_L':
         surf = os.path.join(_surf_dir,'fs_L','fs_LR.32k.L.flat.surf.gii')
@@ -158,99 +99,10 @@ def _map_color(faces, data, scale, cmap=None, threshold = None):
         if underlay is None: 
             underlay = os.path.join(_surf_dir,'fs_R','fs_LR.32k.R.shape.gii')
 
-    Input:
-        data (1d-np-array)
-            Numpy Array of values to scale. If integer, if it is not scaled
-        scale (array like)
-            (min,max) of the scaling of the data
-        cmap (str, or matplotlib.colors.Colormap)
-            The Matplotlib colormap
-        threshold (array like)
-            (lower, upper) threshold for data display -
-             only data x<lower and x>upper will be plotted
-            if one value is given (-inf) is assumed for the lower
-    """
-
-    # When continuous data, scale and threshold
-    if data.dtype.kind == 'f':
-        # if threshold is given, threshold the data
-        if threshold is not None:
-            if np.isscalar(threshold):
-                threshold=np.array([-np.inf,threshold])
-            data[np.logical_and(data>threshold[0], data<threshold[1])]=np.nan
-
-        # if scale not given, find it
-        if scale is None:
-            scale = np.array([np.nanmin(data), np.nanmax(data)])
-
-        # Scale the data
-        data = ((data - scale[0]) / (scale[1] - scale[0]))
-
-    # Map the values from vertices to faces and integrate
-    numFaces = faces.shape[0]
-    face_value = np.zeros((3,numFaces),dtype = data.dtype)
-    for i in range(3):
-        face_value[i,:] = data[faces[:,i]]
-
-    if data.dtype.kind == 'i':
-        face_value,_ = ss.mode(face_value,axis=0)
-        face_value = face_value.reshape((numFaces,))
-    else:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            face_value = np.nanmean(face_value, axis=0)
-
-    # Get the color map
-    if type(cmap) is str:
-        cmap = plt.get_cmap(cmap)
-    elif type(cmap) is np.ndarray:
-        cmap = ListedColormap(cmap)
-    elif cmap is None:
-        cmap = plt.get_cmap('jet')
-
-    # Map the color
-    color_data = cmap(face_value)
-
-    # Set missing data 0 for int or NaN for float to NaN
-    if data.dtype.kind == 'f':
-        color_data[np.isnan(face_value),:]=np.nan
-    elif data.dtype.kind == 'i':
-        color_data[face_value==0,:]=np.nan
-    return color_data
-
-def _render_matplotlib(vertices,faces,face_color, borders):
-    """
-    Render the data in matplotlib: This is segmented to allow for openGL renderer
-
-    Input:
-        vertices (np.ndarray)
-            Array of vertices
-        faces (nd.array)
-            Array of Faces
-        face_color (nd.array)
-            RGBA array of color and alpha of all vertices
-    """
-    patches = []
-    for i in range(faces.shape[0]):
-        polygon = Polygon(vertices[faces[i],0:2], True)
-        patches.append(polygon)
-    p = PatchCollection(patches)
-    p.set_facecolor(face_color)
-    p.set_linewidth(0.0)
-
-    # Get the current axis and plot it
-    ax = plt.gca()
-    ax.add_collection(p)
-    xrang = [np.nanmin(vertices[:,0]),np.nanmax(vertices[:,0])]
-    yrang = [np.nanmin(vertices[:,1]),np.nanmax(vertices[:,1])]
-
-    ax.set_xlim(xrang[0],xrang[1])
-    ax.set_ylim(yrang[0],yrang[1])
-    ax.axis('equal')
-    ax.axis('off')
-
-    if borders is not None:
-        ax.plot(borders[:,0],borders[:,1],color='k',
-                marker='.', linestyle=None,
-                markersize=2,linewidth=0)
-    return ax
+    fig = suit.flatmap.plot( data,surf,
+        underlay,undermap,underscale,
+        overlay_type,threshold,cmap,cscale,label_names,
+        borders,bordercolor,bordersize,
+        alpha,render,hover,new_figure,colorbar,
+        cbar_tick_format,backgroundcolor,frame)
+    return fig

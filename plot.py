@@ -99,10 +99,10 @@ def plotmap(
         if underlay is None: 
             underlay = os.path.join(_surf_dir,'fs_R','fs_LR.32k.R.shape.gii')
 
-    fig = suit.flatmap.plot( data,surf,
+    fig = suit.flatmap.plot(data,surf,
         underlay,undermap,underscale,
         overlay_type,threshold,cmap,cscale,label_names,
         borders,bordercolor,bordersize,
         alpha,render,hover,new_figure,colorbar,
-        cbar_tick_format,backgroundcolor,frame)
+        cbar_tick_format,backgroundcolor)
     return fig

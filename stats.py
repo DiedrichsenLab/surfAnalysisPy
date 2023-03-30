@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-
 import os
 import sys
 import numpy as np
 import nibabel as nb
 import subprocess
-
 
 def smooth_cifti(cifti_input, 
                  cifti_output,
@@ -28,6 +25,54 @@ def smooth_cifti(cifti_input,
 def smooth_metric():
     return
 
+def gradient_cifti(cifti_input, cifti_output, left_surface, right_surface,
+                   cerebellum=None, direction="COLUMN", surface_presmooth=2.0,
+                   volume_presmooth=None, average_out=False, vectors=False):
+    """Calculating the gradient of a cifti file using wb_command -cifti-gradient
+
+    Args:
+        cifti_input: path to input cifti file
+        cifti_output: path to output cifti file
+        left_surface: path to left surface
+        right_surface: path to right surface
+        cerebellum: path to cerebellum surface
+        direction: direction to calculate gradient, default is COLUMN
+        surface_presmooth: surface presmooth if applied, default is 2.0
+                           don't apply to pre-smoothed functional connectivity
+                           file, set to None
+        volume_presmooth: volume presmooth if applied, default is None
+        average_out: average out the gradient, default is False
+        vectors: output vectors, default is False
+
+    Returns:
+        None - writes out cifti file of functional gradient
+
+    Notes (from wb_command -cifti-gradient):
+        Performs gradient calculation on each component of the cifti file, and
+        optionally averages the resulting gradients.  The -vectors and
+        -average-output options may not be used together.  You must specify a
+        surface for each surface structure in the cifti file.  The COLUMN
+        direction should be faster, and is the direction that works on dtseries.
+        For dconn, you probably want ROW, unless you are using -average-output.
+    """
+    # make base command (minimum required arguments)
+    cmd = f"wb_command -cifti-gradient {cifti_input} {direction} {cifti_output} " \
+          f"-left-surface {left_surface} -right-surface {right_surface}"
+
+    # add optional arguments if needed
+    if cerebellum is not None:
+        cmd += f" -cerebellum-surface {cerebellum}"
+    if surface_presmooth is not None:
+        cmd += f" -surface-presmooth {surface_presmooth}"
+    if volume_presmooth is not None:
+        cmd += f" -volume-presmooth {volume_presmooth}"
+    if average_out:
+        cmd += " -average-out"
+    if vectors:
+        cmd += " -vectors"
+
+    subprocess.run(cmd, shell=True)
+    return
 
 # def group_giftis(fileList,inputCol=[],outColNames=[],\
 #                 outFileNames=[],outFileNamePattern='{}.func.gii',\

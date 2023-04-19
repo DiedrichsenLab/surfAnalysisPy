@@ -4,4 +4,4 @@
 # from <module name> import <function name>  
 from surfAnalysisPy import map
 from surfAnalysisPy import plot
-
+from surfAnalysisPy import stats

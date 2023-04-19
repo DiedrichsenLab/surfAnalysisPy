@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+""" Some helper functions for working with cifti/gifti files
+    using wb_command
+
+Created on 4/19/2023 at 12:33 PM
+Author: dzhi, jdiedrichsen, lshahshahani
+"""
 import os
 import sys
 import numpy as np
 import nibabel as nb
+import scipy.io as spio
 import subprocess
 
 def smooth_cifti(cifti_input, 
@@ -73,6 +80,60 @@ def gradient_cifti(cifti_input, cifti_output, left_surface, right_surface,
 
     subprocess.run(cmd, shell=True)
     return
+
+def get_god_distance(surf, max_dist=None, c_area=None, naive=None,
+                     save_file=True, out_file='distGOD_sp.mat'):
+    """ Calculates the geodesic distance between all vertices on a surface
+        using wb_command -surface-geodesic-distance
+
+    Args:
+        surf (surf.gii): path to surface file
+        max_dist (int): maximum distance to calculate
+        c_area: vertex areas to use instead of computing them from
+            the surface
+        naive: use only neighbors, don't crawl triangles (not recommended)
+
+    Returns:
+        D (np.ndarray): geodesic distance matrix
+
+    Notes (from wb_command -surface-geodesic-distance)
+        Unless -limit is specified, computes the geodesic distance from the
+        specified vertex to all others. The result is output as a single column
+         metric file, with a value of -1 for vertices that the distance was not
+        computed for.
+
+    References:
+        https://www.humanconnectome.org/software/workbench-command/
+        -surface-geodesic-distance
+    """
+    D = []
+    vertice = nb.load(surf).darrays[0].data
+
+    # make base command (minimum required arguments)
+    cmd = f"wb_command -surface-geodesic-distance {surf} " + "{0} tmp.func.gii"
+    # add optional arguments if needed
+    if max_dist is not None:
+        cmd += f" -limit {max_dist}"
+    if c_area is not None:
+        cmd += f" -corrected-areas {c_area}"
+    if naive is not None:
+        cmd += f" -naive {naive}"
+
+    # Loop through all vertices
+    for i in range(vertice.shape[0]):
+        if i % 1000 == 0:
+            print(f"Done vertex {i} of {vertice.shape[0]}")
+
+        subprocess.run(cmd.format(i), shell=True, check=True)
+        dist = nb.load("tmp.func.gii").darrays[0].data
+        D.append(dist)
+
+    os.remove("tmp.func.gii")
+    D = np.stack(D)
+    if save_file:
+        spio.savemat(out_file, {"avrgDs": D})
+
+    return D
 
 # def group_giftis(fileList,inputCol=[],outColNames=[],\
 #                 outFileNames=[],outFileNamePattern='{}.func.gii',\

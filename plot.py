@@ -104,5 +104,5 @@ def plotmap(
         overlay_type,threshold,cmap,cscale,label_names,
         borders,bordercolor,bordersize,
         alpha,render,hover,new_figure,colorbar,
-        cbar_tick_format,backgroundcolor)
+        cbar_tick_format,backgroundcolor, frame)
     return fig

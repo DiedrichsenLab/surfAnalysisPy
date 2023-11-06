@@ -82,6 +82,9 @@ def plotmap(
             Controls how to format the tick labels of the colorbar, and for the hover label.
             Ex: use "%i" to display as integers.
             Default='%.2g' for scientific notation.
+        backgroundcolor (str): 
+            Color for the background of the plot (default: 'w')
+        frame (list): [Left, Right, Top, Bottom] margins for the plot (default: plot entire surface )
 
     Returns:
         ax (matplotlib.axis)
